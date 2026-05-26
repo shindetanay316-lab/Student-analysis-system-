@@ -1,0 +1,8 @@
+flask
+flask-sqlalchemy
+pymysql
+cryptography
+werkzeug
+pandas
+openpyxl
+reportlab

@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECE SMS — Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+
+<body>
+
+    <!-- ══════════════════════════════════════════════════════════
+     SIDEBAR
+══════════════════════════════════════════════════════════ -->
+    <aside class="sidebar" id="sidebar">
+
+        <!-- Brand -->
+        <div class="sb-brand">
+            <a class="sb-brand-logo" href="/">
+                <div class="sb-brand-emblem">EC</div>
+                <div class="sb-brand-text">
+                    <span class="sb-brand-name">ECE&nbsp;Student&nbsp;MS</span>
+                    <span class="sb-brand-sub">Management System</span>
+                </div>
+            </a>
+        </div>
+
+        <!-- College tag -->
+        <div class="sb-college-tag">
+            <p>CSMSS Chh. Shahu College of Engineering<br>Dept. of Electronics &amp; Computer Engg.</p>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="sb-nav">
+
+            <div class="sb-nav-section">
+                <span class="sb-nav-section-label">Overview</span>
+                <button class="sb-nav-item active" onclick="showSection('overview')">
+                    <span class="sb-icon">&#9689;</span>
+                    Dashboard
+                </button>
+            </div>
+
+            <div class="sb-divider"></div>
+
+            <div class="sb-nav-section">
+                <span class="sb-nav-section-label">Marks Entry</span>
+                <button class="sb-nav-item" onclick="showSection('marks-status')">
+                    <span class="sb-icon">&#9998;</span>
+                    Subject Marks Status
+                </button>
+                <a class="sb-nav-item" href="/ct1">
+                    <span class="sb-icon">&#10133;</span>
+                    Enter / Upload Marks
+                    <span class="sb-badge new">Go</span>
+                </a>
+                <a class="sb-nav-item" href="/external">
+                    <span class="sb-icon">&#128221;</span>
+                    External Marks
+                    <span class="sb-badge new">ESE</span>
+                </a>
+            </div>
+
+            <div class="sb-divider"></div>
+
+            <div class="sb-nav-section">
+                <span class="sb-nav-section-label">Reports</span>
+                <button class="sb-nav-item" onclick="showSection('individual-report')">
+                    <span class="sb-icon">&#128196;</span>
+                    Individual Exam Report
+                </button>
+                <button class="sb-nav-item" onclick="showSection('internal-report')">
+                    <span class="sb-icon">&#128203;</span>
+                    Internal Marks Report
+                </button>
+            </div>
+
+            <div class="sb-divider"></div>
+
+            <div class="sb-nav-section">
+                <span class="sb-nav-section-label">Department</span>
+                <button class="sb-nav-item" onclick="showSection('dept-summary')">
+                    <span class="sb-icon">&#9782;</span>
+                    Department Summary
+                    <span class="sb-badge">Official</span>
+                </button>
+            </div>
+
+        </nav>
+
+        <!-- Sidebar footer -->
+        <div class="sb-footer">
+            <div class="sb-footer-info">
+                Academic Year <strong>{{ academic_year }}</strong><br>
+                Active Semester <strong>
+                    {% if active_sem %}Semester {{ active_sem.semester_id }}{% else %}—{% endif %}
+                </strong>
+            </div>
+        </div>
+
+    </aside>
+
+    <!-- ══════════════════════════════════════════════════════════
+     MAIN WRAPPER
+══════════════════════════════════════════════════════════ -->
+    <div class="main-wrap">
+
+        <!-- Top Header -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <button class="sb-toggle" onclick="toggleSidebar()">&#9776;</button>
+                <nav class="topbar-breadcrumb">
+                    <span>ECE SMS</span>
+                    &#8250;
+                    <strong id="breadcrumbLabel">Dashboard</strong>
+                </nav>
+            </div>
+            <div class="topbar-right">
+                <span class="topbar-ay">{{ academic_year }}</span>
+                <div class="topbar-semester-pill">
+                    <div class="topbar-dot"></div>
+                    {% if active_sem %}Sem {{ active_sem.semester_id }} Active{% else %}No Active Sem{% endif %}
+                </div>
+            </div>
+        </header>
+
+        <!-- Content -->
+        <main class="content">
+
+            <!-- Flash messages (shared across all sections) -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <div class="flash-messages">
+                {% for cat, msg in messages %}
+                <div class="alert alert-{{ cat }}">{{ msg | safe }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% endwith %}
+
+            <!-- ══════════════════════════════════════════════════════
+         SECTION 1 — OVERVIEW / DASHBOARD
+    ══════════════════════════════════════════════════════ -->
+            <section class="page-section active" id="sec-overview">
+
+                <div class="section-head">
+                    <h1 class="section-title">Good morning, <span>Faculty</span></h1>
+                    <p class="section-sub">
+                        Here is a snapshot of your department for Academic Year {{ academic_year }}.
+                    </p>
+                </div>
+
+                <!-- Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card gold">
+                        <div class="stat-icon">&#127891;</div>
+                        <div class="stat-value">{{ student_count }}</div>
+                        <div class="stat-label">Total Students</div>
+                        <div class="stat-sub">Enrolled across all semesters</div>
+                    </div>
+                    <div class="stat-card teal">
+                        <div class="stat-icon">&#128218;</div>
+                        <div class="stat-value">{{ subject_count }}</div>
+                        <div class="stat-label">Active Subjects</div>
+                        <div class="stat-sub">Theory &amp; Lab (excl. Audit)</div>
+                    </div>
+                    <div class="stat-card crimson">
+                        <div class="stat-icon">&#9998;</div>
+                        <div class="stat-value">{{ theory_subjects | length }}</div>
+                        <div class="stat-label">Theory Subjects</div>
+                        <div class="stat-sub">
+                            Semester
+                            {% if active_sem %}{{ active_sem.semester_id }}{% else %}—{% endif %}
+                        </div>
+                    </div>
+                    <div class="stat-card forest">
+                        <div class="stat-icon">&#9989;</div>
+                        <div class="stat-value">
+                            {{ locked_count }}
+                        </div>
+                        <div class="stat-label">CT1 Locked</div>
+                        <div class="stat-sub">Subjects with CT1 submitted</div>
+                    </div>
+                </div>
+
+                <!-- Quick actions -->
+                <div class="ornament">
+                    <div class="ornament-line"></div>
+                    <div class="ornament-text">Quick Actions</div>
+                    <div class="ornament-line"></div>
+                </div>
+
+                <div class="action-grid">
+                    <div class="action-card gold-card" onclick="showSection('marks-status')">
+                        <div class="action-card-icon">&#9998;</div>
+                        <div class="action-card-title">Marks Entry</div>
+                        <div class="action-card-desc">
+                            Upload CT1, CT2, Assignment, or Midsem marks via Excel template.
+                            View lock status for each subject.
+                        </div>
+                        <div class="action-card-arrow">Go to Marks Entry &rarr;</div>
+                    </div>
+
+                    <div class="action-card teal-card" onclick="showSection('individual-report')">
+                        <div class="action-card-icon">&#128196;</div>
+                        <div class="action-card-title">Download Reports</div>
+                        <div class="action-card-desc">
+                            Generate individual exam reports and internal marks reports
+                            in Excel or PDF format.
+                        </div>
+                        <div class="action-card-arrow">Download Reports &rarr;</div>
+                    </div>
+
+                    <div class="action-card forest-card" onclick="showSection('dept-summary')">
+                        <div class="action-card-icon">&#9782;</div>
+                        <div class="action-card-title">Department Summary</div>
+                        <div class="action-card-desc">
+                            Generate the official OBT/CT result summary sheet for the
+                            entire department — Excel &amp; PDF.
+                        </div>
+                        <div class="action-card-arrow">Generate Summary &rarr;</div>
+                    </div>
+                </div>
+
+                <!-- Subject overview table -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-header-icon gold">&#128218;</div>
+                        <div>
+                            <div class="panel-title">Semester
+                                {% if active_sem %}{{ active_sem.semester_id }}{% endif %}
+                                — Theory Subjects
+                            </div>
+                            <div class="panel-sub">CT1 submission status for current active semester</div>
+                        </div>
+                        <a href="/ct1" class="panel-badge">Enter Marks &rarr;</a>
+                    </div>
+                    <div class="panel-body" style="padding: 0;">
+                        {% if theory_subjects %}
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Subject Code</th>
+                                    <th>Subject Name</th>
+                                    <th>Credits</th>
+                                    <th>Category</th>
+                                    <th>CT1 Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for subj in theory_subjects %}
+                                {% set is_locked = ct1_lock.get(subj.subject_code, False) %}
+                                <tr>
+                                    <td><span class="mono">{{ subj.subject_code }}</span></td>
+                                    <td>{{ subj.subject_name }}</td>
+                                    <td>{{ subj.credits }}</td>
+                                    <td>{{ subj.category }}</td>
+                                    <td>
+                                        {% if is_locked %}
+                                        <span class="pill pill-locked">
+                                            <span class="pill-dot"></span>Submitted
+                                        </span>
+                                        {% else %}
+                                        <span class="pill pill-open">
+                                            <span class="pill-dot"></span>Open
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="/ct1?semester_id={{ active_sem.semester_id if active_sem else 6 }}&exam_type=CT1&subject_code={{ subj.subject_code }}"
+                                            class="btn btn-outline btn-sm">Manage</a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% else %}
+                        <div style="padding:24px;text-align:center;color:var(--text-3);font-size:13px;">
+                            No theory subjects found for the active semester.
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- ══════════════════════════════════════════════════════
+         SECTION 2 — MARKS STATUS
+    ══════════════════════════════════════════════════════ -->
+            <section class="page-section" id="sec-marks-status">
+
+                <div class="section-head">
+                    <h1 class="section-title">Subject <span>Marks Status</span></h1>
+                    <p class="section-sub">
+                        View lock status for each subject and navigate to the marks entry page.
+                    </p>
+                </div>
+
+                <div class="panel" style="margin-bottom:20px;">
+                    <div class="panel-header">
+                        <div class="panel-header-icon gold">&#9998;</div>
+                        <div>
+                            <div class="panel-title">Select Semester to View Status</div>
+                            <div class="panel-sub">Choose a semester then go to marks entry</div>
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="form-grid form-grid-2" style="margin-bottom:18px;">
+                            <div class="form-group">
+                                <label class="form-label">Semester</label>
+                                <select class="form-control" id="statusSemester" onchange="updateStatusLinks()">
+                                    <option value="">-- Select Semester --</option>
+                                    {% for sem in all_semesters %}
+                                    <option value="{{ sem.semester_id }}" {% if active_sem and
+                                        sem.semester_id==active_sem.semester_id %}selected{% endif %}>
+                                        Semester {{ sem.semester_id }} ({{ sem.academic_year }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Exam Type</label>
+                                <select class="form-control" id="statusExam" onchange="updateStatusLinks()">
+                                    <option value="CT1">Class Test 1</option>
+                                    <option value="CT2">Class Test 2</option>
+                                    <option value="MIDSEM">Mid Semester Exam</option>
+                                    <option value="ASSIGNMENT">Assignment</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                            <a id="goMarksEntry" href="/ct1" class="btn btn-gold btn-lg">
+                                Go to Marks Entry Page
+                            </a>
+                            <a id="goMarksSubject" href="/ct1" class="btn btn-outline btn-lg">
+                                Open with Selected Filters
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Subject cards grid -->
+                <div class="marks-grid">
+                    {% for subj in theory_subjects %}
+                    {% set ct1_locked = ct1_lock.get(subj.subject_code, False) %}
+                    <div class="marks-card">
+                        <div class="marks-card-head">
+                            <span class="marks-card-code">{{ subj.subject_code }}</span>
+                            <span style="font-size:11px;color:var(--text-3);">{{ subj.credits }} cr &middot; {{
+                                subj.category }}</span>
+                        </div>
+                        <div class="marks-card-body">
+                            <div class="marks-card-name">{{ subj.subject_name }}</div>
+                            <div class="exam-pills">
+                                <span class="pill {% if ct1_locked %}pill-locked{% else %}pill-open{% endif %}">
+                                    <span class="pill-dot"></span>CT1
+                                </span>
+                                <span class="pill pill-open">
+                                    <span class="pill-dot"></span>CT2
+                                </span>
+                                <span class="pill pill-open">
+                                    <span class="pill-dot"></span>Assignment
+                                </span>
+                                <span class="pill pill-open">
+                                    <span class="pill-dot"></span>Midsem
+                                </span>
+                            </div>
+                            <div class="marks-card-actions">
+                                <a href="/ct1?semester_id={{ active_sem.semester_id if active_sem else 6 }}&exam_type=CT1&subject_code={{ subj.subject_code }}"
+                                    class="btn btn-gold btn-sm">Enter Marks</a>
+                                <a href="/ct1?semester_id={{ active_sem.semester_id if active_sem else 6 }}&exam_type=CT1&subject_code={{ subj.subject_code }}"
+                                    class="btn btn-outline btn-sm">Reports</a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% if not theory_subjects %}
+                    <div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--text-3);font-size:13px;">
+                        No theory subjects found for the active semester.
+                    </div>
+                    {% endif %}
+                </div>
+
+            </section>
+
+            <!-- ══════════════════════════════════════════════════════
+         SECTION 3 — INDIVIDUAL EXAM REPORT
+    ══════════════════════════════════════════════════════ -->
+            <section class="page-section" id="sec-individual-report">
+
+                <div class="section-head">
+                    <h1 class="section-title">Individual <span>Exam Report</span></h1>
+                    <p class="section-sub">
+                        Download per-subject CT / Midsem marks report in Excel or PDF.
+                        Report includes student-wise marks, statistics, and analysis.
+                    </p>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-header-icon teal">&#128196;</div>
+                        <div>
+                            <div class="panel-title">Report Configuration</div>
+                            <div class="panel-sub">Fill subject details then download</div>
+                        </div>
+                        <span class="panel-badge">Per Subject</span>
+                    </div>
+                    <div class="panel-body">
+
+                        <div class="form-grid form-grid-3" style="margin-bottom:18px;">
+                            <div class="form-group">
+                                <label class="form-label">Semester <span class="req">*</span></label>
+                                <select class="form-control" id="ir_semester"
+                                    onchange="loadSubjects('ir_semester','ir_subject')">
+                                    <option value="">-- Select Semester --</option>
+                                    {% for sem in all_semesters %}
+                                    <option value="{{ sem.semester_id }}" {% if active_sem and
+                                        sem.semester_id==active_sem.semester_id %}selected{% endif %}>
+                                        Semester {{ sem.semester_id }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Exam Type <span class="req">*</span></label>
+                                <select class="form-control" id="ir_exam">
+                                    <option value="CT1">Class Test 1</option>
+                                    <option value="CT2">Class Test 2</option>
+                                    <option value="MIDSEM">Mid Semester Exam</option>
+                                    <option value="ASSIGNMENT">Assignment</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Subject <span class="req">*</span></label>
+                                <select class="form-control" id="ir_subject">
+                                    <option value="">-- Select Subject --</option>
+                                    {% for subj in theory_subjects %}
+                                    <option value="{{ subj.subject_code }}">
+                                        {{ subj.subject_code }} — {{ subj.subject_name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-grid form-grid-2" style="margin-bottom:20px;">
+                            <div class="form-group">
+                                <label class="form-label">Subject Teacher Name</label>
+                                <input type="text" class="form-control" id="ir_teacher"
+                                    placeholder="e.g. Prof. J.N. Mohite">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Examination Date</label>
+                                <input type="date" class="form-control" id="ir_date">
+                            </div>
+                        </div>
+
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                            <button type="button" class="btn btn-forest btn-lg"
+                                onclick="downloadIndividualReport('excel')">
+                                &#8681; Download Excel Report
+                            </button>
+                            <button type="button" class="btn btn-crimson btn-lg"
+                                onclick="downloadIndividualReport('pdf')">
+                                &#8681; Download PDF Report
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- ══════════════════════════════════════════════════════
+         SECTION 4 — INTERNAL MARKS REPORT
+    ══════════════════════════════════════════════════════ -->
+            <section class="page-section" id="sec-internal-report">
+
+                <div class="section-head">
+                    <h1 class="section-title">Internal Marks <span>Report</span></h1>
+                    <p class="section-sub">
+                        Download the combined internal marks sheet — CT1, CT2, Best CT,
+                        Assignment, CA, Midsem, and Internal Total for each student.
+                    </p>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-header-icon crimson">&#128203;</div>
+                        <div>
+                            <div class="panel-title">Internal Marks Configuration</div>
+                            <div class="panel-sub">Combines all internal marks components</div>
+                        </div>
+                        <span class="panel-badge">All Components</span>
+                    </div>
+                    <div class="panel-body">
+
+                        <div class="form-grid form-grid-2" style="margin-bottom:20px;">
+                            <div class="form-group">
+                                <label class="form-label">Semester <span class="req">*</span></label>
+                                <select class="form-control" id="int_semester">
+                                    <option value="">-- Select Semester --</option>
+                                    {% for sem in all_semesters %}
+                                    <option value="{{ sem.semester_id }}" {% if active_sem and
+                                        sem.semester_id==active_sem.semester_id %}selected{% endif %}>
+                                        Semester {{ sem.semester_id }} ({{ sem.academic_year }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Subject <span class="req">*</span></label>
+                                <select class="form-control" id="int_subject">
+                                    <option value="">-- Select Subject --</option>
+                                    {% for subj in theory_subjects %}
+                                    <option value="{{ subj.subject_code }}">
+                                        {{ subj.subject_code }} — {{ subj.subject_name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="panel"
+                            style="background:var(--surface-2);border:1px solid var(--border);margin-bottom:20px;box-shadow:none;">
+                            <div class="panel-body" style="padding:14px 18px;">
+                                <p style="font-size:12.5px;color:var(--text-2);line-height:1.7;">
+                                    <strong style="color:var(--text-1);">What this report includes:</strong>
+                                    SR &middot; PRN &middot; Student Name &middot; CT1 &middot; CT2 &middot;
+                                    Best CT &middot; Assignment &middot; CA Marks &middot; Midsem &middot;
+                                    Internal Total (out of 40). Absent students show blank.
+                                    Signatures for Subject Teacher, Class Teacher, and HOD are included.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                            <button type="button" class="btn btn-forest btn-lg"
+                                onclick="downloadInternalReport('excel')">
+                                &#8681; Download Excel Internal Report
+                            </button>
+                            <button type="button" class="btn btn-crimson btn-lg"
+                                onclick="downloadInternalReport('pdf')">
+                                &#8681; Download PDF Internal Report
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- ══════════════════════════════════════════════════════
+         SECTION 5 — DEPARTMENT SUMMARY
+    ══════════════════════════════════════════════════════ -->
+            <section class="page-section" id="sec-dept-summary">
+
+                <div class="section-head">
+                    <h1 class="section-title">Department <span>Summary Report</span></h1>
+                    <p class="section-sub">
+                        Generate the official OBT / CT result summary sheet for the entire department.
+                        Matches the AC-12 format used by the college.
+                    </p>
+                </div>
+
+                <div class="panel" style="position:relative;">
+                    <div class="panel-header">
+                        <div class="panel-header-icon forest">&#9782;</div>
+                        <div>
+                            <div class="panel-title">Summary Report Configuration</div>
+                            <div class="panel-sub">Official department-level result sheet (Form AC-12)</div>
+                        </div>
+                        <span class="panel-badge">Official Record</span>
+                    </div>
+                    <div class="panel-body">
+
+                        <!-- Row 1: Semester + Exam -->
+                        <div class="form-grid form-grid-2" style="margin-bottom:18px;">
+                            <div class="form-group">
+                                <label class="form-label">Semester <span class="req">*</span></label>
+                                <select class="form-control" id="sum_semester">
+                                    <option value="">-- Select Semester --</option>
+                                    {% for sem in all_semesters %}
+                                    <option value="{{ sem.semester_id }}" {% if active_sem and
+                                        sem.semester_id==active_sem.semester_id %}selected{% endif %}>
+                                        Semester {{ sem.semester_id }} ({{ sem.academic_year }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <span class="form-hint">Determines which subjects appear in the report</span>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Exam Type <span class="req">*</span></label>
+                                <select class="form-control" id="sum_exam_type">
+                                    <option value="CT1">Class Test 1</option>
+                                    <option value="CT2">Class Test 2</option>
+                                    <option value="MIDSEM">Mid Semester Examination</option>
+                                    <option value="ASSIGNMENT">Assignment</option>
+                                </select>
+                                <span class="form-hint">Controls which marks column is aggregated</span>
+                            </div>
+                        </div>
+
+                        <!-- Row 2: Dates -->
+                        <div class="form-grid form-grid-2" style="margin-bottom:18px;">
+                            <div class="form-group">
+                                <label class="form-label">Examination Period — From</label>
+                                <input type="date" class="form-control" id="sum_date_from">
+                                <span class="form-hint">Start date printed on official report</span>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Examination Period — To</label>
+                                <input type="date" class="form-control" id="sum_date_to">
+                                <span class="form-hint">End date printed on official report</span>
+                            </div>
+                        </div>
+
+                        <div class="ornament">
+                            <div class="ornament-line"></div>
+                            <div class="ornament-text">Signature Block Details</div>
+                            <div class="ornament-line"></div>
+                        </div>
+
+                        <!-- Row 3: Signatories -->
+                        <div class="form-grid form-grid-3" style="margin-bottom:18px;">
+                            <div class="form-group">
+                                <label class="form-label">Class Test Coordinator</label>
+                                <input type="text" class="form-control" id="sum_coordinator"
+                                    placeholder="e.g. Prof. D.D. Darp">
+                                <span class="form-hint">Appears in signature block</span>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Dean Academics</label>
+                                <input type="text" class="form-control" id="sum_dean"
+                                    placeholder="e.g. Dr. K.N. Pathan">
+                                <span class="form-hint">Appears in signature block</span>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Principal</label>
+                                <input type="text" class="form-control" id="sum_principal"
+                                    placeholder="e.g. Dr. G.B. Dongre">
+                                <span class="form-hint">Appears in signature block</span>
+                            </div>
+                        </div>
+
+                        <!-- Status bar -->
+                        <div class="status-bar" id="sumStatusBar">
+                            <div class="status-dot" id="sumStatusDot"></div>
+                            <span class="status-text" id="sumStatusText">
+                                Select a semester and exam type, then download the report.
+                            </span>
+                        </div>
+
+                        <!-- Buttons -->
+                        <div style="display:flex;gap:14px;flex-wrap:wrap;">
+                            <button type="button" class="btn btn-forest btn-lg" id="sumBtnExcel"
+                                onclick="downloadSummary('excel')">
+                                &#8681; Download Excel Summary
+                                <span style="font-size:11px;opacity:0.75;margin-left:4px;">.xlsx</span>
+                            </button>
+                            <button type="button" class="btn btn-crimson btn-lg" id="sumBtnPdf"
+                                onclick="downloadSummary('pdf')">
+                                &#8681; Download PDF Summary
+                                <span style="font-size:11px;opacity:0.75;margin-left:4px;">.pdf — A4 Landscape</span>
+                            </button>
+                        </div>
+
+                    </div>
+
+                    <!-- Loading overlay -->
+                    <div class="loading-overlay" id="sumLoadingOverlay">
+                        <div class="spinner"></div>
+                        <p class="loading-text">Generating official summary report&hellip;</p>
+                        <p class="loading-sub">Aggregating subject-wise marks data. Please wait.</p>
+                    </div>
+
+                </div>
+
+                <!-- Info panel -->
+                <div class="panel" style="background:var(--surface-2);border:1px solid var(--border);box-shadow:none;">
+                    <div class="panel-body" style="padding:18px 24px;">
+                        <p style="font-size:13px;color:var(--text-2);line-height:1.75;">
+                            <strong style="color:var(--text-1);">What this report includes:</strong>
+                            Department header with college branding &middot; Subject-wise Appeared / Passed / Failed /
+                            Absent counts &middot;
+                            Subject Result % &middot; Average Class Result &middot; Faculty abbreviation table &middot;
+                            Four-signature block (Coordinator, HOD, Dean, Principal).
+                            <br><strong style="color:var(--text-1);">Format:</strong>
+                            Matches the official AC-12 OBT Result Summary format used by the college.
+                        </p>
+                    </div>
+                </div>
+
+            </section>
+
+        </main>
+
+        <!-- Page footer -->
+        <footer class="page-footer">
+            <span>ECE Student Management System &mdash; <strong>CSMSS Chh. Shahu College of Engineering</strong></span>
+            <span>Academic Year {{ academic_year }}</span>
+        </footer>
+
+    </div>
+    <!-- end main-wrap -->
+
+    <!-- Hidden iframe for file downloads -->
+    <iframe id="dlFrame" name="dlFrame" style="display:none;" sandbox="allow-downloads allow-same-origin">
+    </iframe>
+
+    <!-- ══════════════════════════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════════════════════════ -->
+    <script>
+        // ── Section navigation ────────────────────────────────────────
+        const SECTION_LABELS = {
+            'overview': 'Dashboard',
+            'marks-status': 'Marks Status',
+            'individual-report': 'Individual Report',
+            'internal-report': 'Internal Marks Report',
+            'dept-summary': 'Department Summary',
+        };
+
+        function showSection(id) {
+            document.querySelectorAll('.page-section').forEach(s =>
+                s.classList.remove('active')
+            );
+
+            document.querySelectorAll('.sb-nav-item').forEach(i =>
+                i.classList.remove('active')
+            );
+
+            const sec = document.getElementById('sec-' + id);
+            if (sec) sec.classList.add('active');
+
+            const clicked = document.querySelector(`[onclick="showSection('${id}')"]`);
+            if (clicked) clicked.classList.add('active');
+
+            const label = document.getElementById('breadcrumbLabel');
+            if (label) label.textContent = SECTION_LABELS[id] || id;
+
+            document.getElementById('sidebar').classList.remove('open');
+        }
+
+        // ── Mobile sidebar ────────────────────────────────────────────
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
+
+        // ── Update marks entry links dynamically ──────────────────────
+        function updateStatusLinks() {
+            const sem = document.getElementById('statusSemester').value;
+            const exam = document.getElementById('statusExam') ? document.getElementById('statusExam').value : 'CT1';
+            const base = `/ct1?semester_id=${sem}&exam_type=${exam}`;
+            const go = document.getElementById('goMarksEntry');
+            const goS = document.getElementById('goMarksSubject');
+            if (go) go.href = sem ? base : '/ct1';
+            if (goS) goS.href = sem ? base : '/ct1';
+        }
+
+        // ── Individual exam report download ──────────────────────────
+        function downloadIndividualReport(fmt) {
+            const sem = document.getElementById('ir_semester').value;
+            const exam = document.getElementById('ir_exam').value;
+            const subject = document.getElementById('ir_subject').value;
+            const teacher = document.getElementById('ir_teacher').value;
+            const dt = document.getElementById('ir_date').value;
+
+            if (!sem || !subject) {
+                alert('Please select semester and subject first.');
+                return;
+            }
+
+            const params = new URLSearchParams({
+                subject_code: subject,
+                semester_id: sem,
+                exam_type: exam,
+                subject_teacher: teacher,
+                exam_date: dt,
+            });
+
+            document.getElementById('dlFrame').src =
+                `/download-ct1-report/${fmt}?` + params.toString();
+        }
+
+        // ── Internal marks report download ───────────────────────────
+        function downloadInternalReport(fmt) {
+            const sem = document.getElementById('int_semester').value;
+            const subject = document.getElementById('int_subject').value;
+
+            if (!sem || !subject) {
+                alert('Please select a semester and subject before downloading.');
+                return;
+            }
+
+            const params = new URLSearchParams({
+                subject_code: subject,
+                semester_id: sem,
+            });
+
+            document.getElementById('dlFrame').src =
+                `/download-internal-report/${fmt}?` + params.toString();
+        }
+
+        // ── Department summary download ───────────────────────────────
+        function downloadSummary(fmt) {
+            const sem = document.getElementById('sum_semester').value;
+            const exam = document.getElementById('sum_exam_type').value;
+            const dateFrom = document.getElementById('sum_date_from').value;
+            const dateTo = document.getElementById('sum_date_to').value;
+            const coordinator = document.getElementById('sum_coordinator').value;
+            const dean = document.getElementById('sum_dean').value;
+            const principal = document.getElementById('sum_principal').value;
+
+            const dot = document.getElementById('sumStatusDot');
+            const txt = document.getElementById('sumStatusText');
+            const bar = document.getElementById('sumStatusBar');
+            const overlay = document.getElementById('sumLoadingOverlay');
+            const btnE = document.getElementById('sumBtnExcel');
+            const btnP = document.getElementById('sumBtnPdf');
+
+            if (!sem) {
+                dot.className = 'status-dot err';
+                txt.textContent = 'Please select a semester before downloading.';
+                bar.style.background = '#FEE2E2';
+                bar.style.borderColor = '#FCA5A5';
+                return;
+            }
+
+            // Loading state
+            dot.className = 'status-dot loading';
+            txt.textContent = 'Generating official summary report\u2026';
+            bar.style.background = '#FFFBEB';
+            bar.style.borderColor = '#FCD34D';
+            btnE.disabled = true;
+            btnP.disabled = true;
+            overlay.classList.add('active');
+
+            const params = new URLSearchParams({
+                semester_id: sem,
+                exam_type: exam,
+                date_from: dateFrom,
+                date_to: dateTo,
+                coordinator: coordinator,
+                dean: dean,
+                principal: principal,
+            });
+
+            const route = fmt === 'excel'
+                ? '/download-ct1-summary-excel'
+                : '/download-ct1-summary-pdf';
+
+            document.getElementById('dlFrame').src = route + '?' + params.toString();
+
+            // Restore after download trigger
+            setTimeout(() => {
+                overlay.classList.remove('active');
+                btnE.disabled = false;
+                btnP.disabled = false;
+                dot.className = 'status-dot ready';
+                txt.textContent = 'Report generated successfully. Ready for next download.';
+                bar.style.background = '#DCFCE7';
+                bar.style.borderColor = '#86EFAC';
+            }, 4200);
+        }
+
+        function loadSubjects(semesterId, subjectId) {
+            const semester = document.getElementById(semesterId).value;
+            const subject = document.getElementById(subjectId);
+
+            if (!semester || !subject) return;
+
+            subject.selectedIndex = 0;
+        }
+
+        // ── Highlight active nav on load ──────────────────────────────
+        document.addEventListener('DOMContentLoaded', () => {
+            const overviewBtn =
+                document.querySelector('[onclick="showSection(\'overview\')"]');
+
+            if (overviewBtn) overviewBtn.classList.add('active');
+
+            updateStatusLinks();
+        });
+    </script>
+
+</body>
+
+</html>

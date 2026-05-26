@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Internal Marks Entry — ECE SMS</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ct1.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sms-theme.css') }}">
+</head>
+
+<body>
+
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="nav-brand-text">
+                <div class="nav-title">ECE Student Management System</div>
+                <div class="nav-sub">Dr. Babasaheb Ambedkar Technological University</div>
+            </div>
+        </div>
+        <div class="nav-links">
+            <a href="/">Dashboard</a>
+            <a href="/ct1" class="active">Internal Marks</a>
+            <a href="/external">External Marks</a>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <div class="page-header-inner">
+            <h1 class="page-title">Internal Marks Entry</h1>
+            <p class="page-sub">
+                Department of Electronics and Computer Engineering
+                &nbsp;&mdash;&nbsp; Academic Year {{ academic_year }}
+            </p>
+        </div>
+    </div>
+
+    <div class="container">
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">
+            <span>{{ message | safe }}</span>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <!-- STEP 1+2+3: Semester / Exam / Subject Selector -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Step 1 — Select Semester, Exam Type and Subject</h2>
+            </div>
+            <div class="card-body">
+                <form id="selectorForm" method="GET" action="/ct1">
+                    <div class="form-grid three-col">
+
+                        <div class="form-group">
+                            <label class="form-label">Semester</label>
+                            <select name="semester_id" class="form-control" required onchange="this.form.submit()">
+                                <option value="">-- Select Semester --</option>
+                                {% for sem in all_semesters %}
+                                <option value="{{ sem.semester_id }}" {% if sem.semester_id==selected_semester
+                                    %}selected{% endif %}>
+                                    Semester {{ sem.semester_id }}
+                                    ({{ sem.academic_year }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        {% if selected_semester %}
+                        <div class="form-group">
+                            <label class="form-label">Exam Type</label>
+                            <select name="exam_type" class="form-control" required onchange="this.form.submit()">
+                                <option value="">-- Select Exam --</option>
+                                {% for etype in exam_types %}
+                                <option value="{{ etype.value }}" {% if etype.value==selected_exam %}selected{% endif
+                                    %}>
+                                    {{ etype.label }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <input type="hidden" name="semester_id" value="{{ selected_semester }}">
+                        </div>
+                        {% endif %}
+
+                        {% if selected_semester and selected_exam %}
+                        <div class="form-group">
+                            <label class="form-label">Subject</label>
+                            <select name="subject_code" class="form-control" required onchange="this.form.submit()">
+                                <option value="">-- Select Subject --</option>
+                                {% for subj in subjects %}
+                                <option value="{{ subj.subject_code }}" {% if subj.subject_code==selected_code
+                                    %}selected{% endif %}>
+                                    {{ subj.subject_code }} &mdash; {{ subj.subject_name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <input type="hidden" name="semester_id" value="{{ selected_semester }}">
+                            <input type="hidden" name="exam_type" value="{{ selected_exam }}">
+                        </div>
+                        {% endif %}
+
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {% if selected_code %}
+
+        {% set is_locked = lock_status.get(selected_code + '_' + selected_exam, False) %}
+
+        <!-- STATUS BANNER -->
+        {% if is_locked %}
+        <div class="status-banner status-locked">
+            Marks have been successfully submitted and locked.
+            Further modifications are restricted to preserve academic record integrity.
+        </div>
+        {% else %}
+        <div class="status-banner status-open">
+            Marks for this subject and examination have not been submitted.
+            Complete the steps below to enter and submit marks.
+        </div>
+        {% endif %}
+
+        {% if not is_locked %}
+        <!-- STEP 2: Teacher Info -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Step 2 — Examination Details</h2>
+            </div>
+            <div class="card-body">
+                <div class="form-grid two-col">
+                    <div class="form-group">
+                        <label class="form-label">Subject Teacher Name</label>
+                        <input type="text" id="teacherName" class="form-control"
+                            placeholder="Enter full name of subject teacher"
+                            value="{{ request.args.get('subject_teacher', '') }}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Examination Date</label>
+                        <input type="date" id="examDate" class="form-control"
+                            value="{{ request.args.get('exam_date', '') }}">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 3: Download Template -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Step 3 — Download Blank Template</h2>
+            </div>
+            <div class="card-body">
+                <p class="card-desc">
+                    Download the official marks entry template pre-filled with
+                    enrolled student details. Enter marks in the designated column
+                    and upload the completed file below.
+                </p>
+                <div class="info-row">
+                    <span class="info-chip">
+                        Exam: {{ selected_exam_label }}
+                    </span>
+                    <span class="info-chip">
+                        Subject: {{ selected_code }}
+                    </span>
+                    <span class="info-chip" id="maxMarksChip">
+                        Maximum Marks:
+                        {% if selected_exam == 'CT1' or selected_exam == 'CT2' %}10
+                        {% elif selected_exam == 'ASSIGNMENT' %}10
+                        {% elif selected_exam == 'MIDSEM' %}20
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="btn-row">
+                    <button type="button" class="btn btn-secondary" onclick="downloadTemplate()">
+                        Download Blank Template
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 4: Upload -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Step 4 — Upload Completed Marks File</h2>
+            </div>
+            <div class="card-body">
+                <p class="card-desc">
+                    Upload the completed Excel file. All entries will be validated
+                    before saving. Once submitted, this record will be permanently
+                    locked and cannot be modified.
+                </p>
+                <form method="POST" action="/upload-ct1" enctype="multipart/form-data" id="uploadForm">
+                    <input type="hidden" name="subject_code" value="{{ selected_code }}">
+                    <input type="hidden" name="exam_type" value="{{ selected_exam }}">
+                    <input type="hidden" name="semester_id" value="{{ selected_semester }}">
+                    <input type="hidden" id="hiddenTeacher" name="subject_teacher" value="">
+                    <input type="hidden" id="hiddenDate" name="exam_date" value="">
+
+                    <div class="form-group" style="margin-bottom:16px;">
+                        <label class="form-label">Select Completed Excel File (.xlsx)</label>
+                        <div class="file-drop-zone" id="dropZone" onclick="document.getElementById('ct1File').click()">
+                            <div class="file-drop-text" id="fileDropText">
+                                Click to select file or drag and drop here
+                            </div>
+                            <input type="file" name="ct1_file" id="ct1File" accept=".xlsx" hidden
+                                onchange="updateFileName(this)">
+                        </div>
+                    </div>
+
+                    <div class="btn-row">
+                        <button type="submit" class="btn btn-primary" onclick="return prepareAndConfirm()">
+                            Submit Marks
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {% else %}
+        <!-- LOCKED STATE: Report Access Only -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Report Access</h2>
+            </div>
+            <div class="card-body">
+                <p class="card-desc">
+                    The marks record for this subject and examination is finalised.
+                    Download the official report in your preferred format.
+                </p>
+
+                <!-- Subject Info -->
+                {% for subj in subjects %}
+                {% if subj.subject_code == selected_code %}
+                <div class="subject-info-bar">
+                    <div class="sib-item">
+                        <span class="sib-label">Subject Code</span>
+                        <span class="sib-value">{{ subj.subject_code }}</span>
+                    </div>
+                    <div class="sib-item">
+                        <span class="sib-label">Subject Name</span>
+                        <span class="sib-value">{{ subj.subject_name }}</span>
+                    </div>
+                    <div class="sib-item">
+                        <span class="sib-label">Credits</span>
+                        <span class="sib-value">{{ subj.credits }}</span>
+                    </div>
+                    <div class="sib-item">
+                        <span class="sib-label">Exam Type</span>
+                        <span class="sib-value">{{ selected_exam_label }}</span>
+                    </div>
+                    <div class="sib-item">
+                        <span class="sib-label">Status</span>
+                        <span class="sib-value locked-badge">Locked</span>
+                    </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+
+                <div class="btn-row" style="margin-top:20px;">
+                    <button type="button" class="btn btn-primary" onclick="openReportModal()">
+                        Download Report
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if selected_code and selected_semester %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Internal Marks Report</h2>
+            </div>
+            <div class="card-body">
+                <p class="card-desc">
+                    Download consolidated internal marks for the selected subject.
+                </p>
+                <div class="btn-row">
+                    <a href="/download-internal-report/excel?subject_code={{ selected_code }}&semester_id={{ selected_semester }}"
+                        class="btn btn-report-excel">
+                        Download Internal Excel
+                    </a>
+                    <a href="/download-internal-report/pdf?subject_code={{ selected_code }}&semester_id={{ selected_semester }}"
+                        class="btn btn-report-pdf">
+                        Download Internal PDF
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% endif %}
+
+    </div>
+
+    <!-- REPORT MODAL -->
+    <div class="modal-overlay" id="reportModal" onclick="closeModalOutside(event)">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3 class="modal-title">Download Report</h3>
+                <button class="modal-close" onclick="closeReportModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-desc">
+                    Select the format in which you wish to download the
+                    {{ selected_exam_label }} marks report.
+                </p>
+                <div class="modal-btns">
+                    <a id="excelReportBtn" href="#" class="btn btn-report-excel">
+                        Download Excel Report
+                    </a>
+                    <a id="pdfReportBtn" href="#" class="btn btn-report-pdf">
+                        Download PDF Report
+                    </a>
+                </div>
+                {% if selected_code and selected_semester %}
+                <p class="modal-desc" style="margin-top:16px; margin-bottom:12px;">
+                    Consolidated internal marks (CT1, CT2, Assignment, Midsem).
+                </p>
+                <div class="modal-btns">
+                    <a id="internalExcelBtn" href="#" class="btn btn-report-excel">
+                        Download Internal Excel
+                    </a>
+                    <a id="internalPdfBtn" href="#" class="btn btn-report-pdf">
+                        Download Internal PDF
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="footer-inner">
+            ECE Student Management System &nbsp;&mdash;&nbsp;
+            Dr. Babasaheb Ambedkar Technological University &nbsp;&mdash;&nbsp;
+            Department of Electronics and Computer Engineering
+        </div>
+    </footer>
+
+    <!-- ═══════════════════════════════════════════════════════════
+     DEPARTMENT SUMMARY REPORTS SECTION
+     Insert before </main> or last </div> before </body>
+═══════════════════════════════════════════════════════════ -->
+    <section class="summary-section" id="summarySectionAnchor">
+
+        <div class="summary-section-header">
+            <div class="summary-section-header-inner">
+                <div class="summary-section-icon">&#9783;</div>
+                <div>
+                    <h2 class="summary-section-title">Department Summary Reports</h2>
+                    <p class="summary-section-subtitle">
+                        Generate official department-wise CT / Midsem performance
+                        reports for institutional records.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="summary-card-wrap">
+            <div class="summary-card">
+
+                <!-- Card Header -->
+                <div class="summary-card-head">
+                    <span class="summary-card-head-label">Report Configuration</span>
+                    <span class="summary-card-head-badge">Official Academic Record</span>
+                </div>
+
+                <!-- Form Body -->
+                <div class="summary-card-body">
+
+                    <!-- Row 1: Semester + Exam Type -->
+                    <div class="summary-form-row">
+
+                        <div class="summary-form-group">
+                            <label class="summary-label" for="sum_semester">
+                                Semester <span class="summary-required">*</span>
+                            </label>
+                            <select id="sum_semester" class="summary-control" required>
+                                <option value="">-- Select Semester --</option>
+                                {% for sem in all_semesters %}
+                                <option value="{{ sem.semester_id }}">
+                                    Semester {{ sem.semester_id }}
+                                    ({{ sem.academic_year }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <span class="summary-hint">
+                                Determines which subjects are included
+                            </span>
+                        </div>
+
+                        <div class="summary-form-group">
+                            <label class="summary-label" for="sum_exam_type">
+                                Exam Type <span class="summary-required">*</span>
+                            </label>
+                            <select id="sum_exam_type" class="summary-control">
+                                <option value="CT1">Class Test 1</option>
+                                <option value="CT2">Class Test 2</option>
+                                <option value="MIDSEM">Mid Semester Examination</option>
+                            </select>
+                            <span class="summary-hint">
+                                Controls which marks column is aggregated
+                            </span>
+                        </div>
+
+                    </div>
+
+                    <!-- Row 2: Date From + Date To -->
+                    <div class="summary-form-row">
+
+                        <div class="summary-form-group">
+                            <label class="summary-label" for="sum_date_from">
+                                Examination Period — From
+                            </label>
+                            <input type="date" id="sum_date_from" class="summary-control" placeholder="dd/mm/yyyy">
+                            <span class="summary-hint">
+                                Start date shown on official report
+                            </span>
+                        </div>
+
+                        <div class="summary-form-group">
+                            <label class="summary-label" for="sum_date_to">
+                                Examination Period — To
+                            </label>
+                            <input type="date" id="sum_date_to" class="summary-control" placeholder="dd/mm/yyyy">
+                            <span class="summary-hint">
+                                End date shown on official report
+                            </span>
+                        </div>
+
+                    </div>
+
+                    <!-- Row 3: Coordinator + Dean -->
+                    <div class="summary-form-row">
+
+                        <div class="summary-form-group">
+                            <label class="summary-label" for="sum_coordinator">
+                                Class Test Coordinator
+                            </label>
+                            <input type="text" id="sum_coordinator" class="summary-control"
+                                placeholder="e.g. Prof. D.D. Darp">
+                            <span class="summary-hint">
+                                Name appears in signature block
+                            </span>
+                        </div>
+
+                        <div class="summary-form-group">
+                            <label class="summary-label" for="sum_dean">
+                                Dean Academics
+                            </label>
+                            <input type="text" id="sum_dean" class="summary-control" placeholder="e.g. Dr. K.N. Pathan">
+                            <span class="summary-hint">
+                                Name appears in signature block
+                            </span>
+                        </div>
+
+                    </div>
+
+                    <!-- Row 4: Principal (single) -->
+                    <div class="summary-form-row summary-form-row-single">
+
+                        <div class="summary-form-group">
+                            <label class="summary-label" for="sum_principal">
+                                Principal
+                            </label>
+                            <input type="text" id="sum_principal" class="summary-control"
+                                placeholder="e.g. Dr. G.B. Dongre">
+                            <span class="summary-hint">
+                                Name appears in signature block
+                            </span>
+                        </div>
+
+                    </div>
+
+                    <!-- Status bar -->
+                    <div class="summary-status-bar" id="summaryStatusBar">
+                        <span class="summary-status-dot" id="summaryStatusDot"></span>
+                        <span class="summary-status-text" id="summaryStatusText">
+                            Select a semester and exam type, then download the report.
+                        </span>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="summary-btn-row">
+
+                        <button type="button" class="summary-btn summary-btn-excel" id="summaryBtnExcel"
+                            onclick="downloadSummary('excel')">
+                            <span class="summary-btn-icon">&#8681;</span>
+                            <span class="summary-btn-label">Download Excel Summary</span>
+                            <span class="summary-btn-sub">.xlsx — Editable</span>
+                        </button>
+
+                        <button type="button" class="summary-btn summary-btn-pdf" id="summaryBtnPdf"
+                            onclick="downloadSummary('pdf')">
+                            <span class="summary-btn-icon">&#8681;</span>
+                            <span class="summary-btn-label">Download PDF Summary</span>
+                            <span class="summary-btn-sub">.pdf — Print-ready A4</span>
+                        </button>
+
+                    </div>
+
+                    <!-- Loading overlay (hidden by default) -->
+                    <div class="summary-loading-overlay" id="summaryLoadingOverlay">
+                        <div class="summary-spinner"></div>
+                        <p class="summary-loading-text">
+                            Generating official summary report&hellip;
+                        </p>
+                        <p class="summary-loading-sub">
+                            This may take a few seconds.
+                        </p>
+                    </div>
+
+                </div>
+                <!-- end card-body -->
+
+            </div>
+            <!-- end summary-card -->
+        </div>
+        <!-- end summary-card-wrap -->
+
+    </section>
+    <!-- end DEPARTMENT SUMMARY REPORTS SECTION -->
+
+    <script>
+        const SELECTED_CODE = "{{ selected_code or '' }}";
+        const SELECTED_EXAM = "{{ selected_exam or '' }}";
+        const SELECTED_SEM = "{{ selected_semester or '' }}";
+
+        function downloadTemplate() {
+            const teacher = document.getElementById('teacherName')
+                ? document.getElementById('teacherName').value : '';
+            const date = document.getElementById('examDate')
+                ? document.getElementById('examDate').value : '';
+            if (!teacher.trim()) {
+                alert('Please enter the Subject Teacher Name before downloading the template.');
+                return;
+            }
+            const url = `/download-ct1-template?subject_code=${SELECTED_CODE}`
+                + `&exam_type=${SELECTED_EXAM}`
+                + `&semester_id=${SELECTED_SEM}`
+                + `&subject_teacher=${encodeURIComponent(teacher)}`
+                + `&exam_date=${encodeURIComponent(date)}`;
+            window.location.href = url;
+        }
+
+        function prepareAndConfirm() {
+            const teacher = document.getElementById('teacherName')
+                ? document.getElementById('teacherName').value : '';
+            const date = document.getElementById('examDate')
+                ? document.getElementById('examDate').value : '';
+            const file = document.getElementById('ct1File');
+
+            if (!file || !file.files || file.files.length === 0) {
+                alert('Please select an Excel file before submitting.');
+                return false;
+            }
+            document.getElementById('hiddenTeacher').value = teacher;
+            document.getElementById('hiddenDate').value = date;
+
+            return confirm(
+                'Once submitted, marks will be permanently locked and cannot be modified.\n\nConfirm submission?'
+            );
+        }
+
+        function updateFileName(input) {
+            const text = document.getElementById('fileDropText');
+            if (input.files && input.files[0]) {
+                text.textContent = 'Selected: ' + input.files[0].name;
+                text.style.color = '#1A2B4A';
+                text.style.fontWeight = 'bold';
+            }
+        }
+
+        function openReportModal() {
+            const base = `?subject_code=${SELECTED_CODE}`
+                + `&exam_type=${SELECTED_EXAM}`
+                + `&semester_id=${SELECTED_SEM}`;
+            const internalBase = `?subject_code=${SELECTED_CODE}`
+                + `&semester_id=${SELECTED_SEM}`;
+            document.getElementById('excelReportBtn').href = `/download-ct1-report/excel${base}`;
+            document.getElementById('pdfReportBtn').href = `/download-ct1-report/pdf${base}`;
+            const internalExcel = document.getElementById('internalExcelBtn');
+            const internalPdf = document.getElementById('internalPdfBtn');
+            if (internalExcel) {
+                internalExcel.href = `/download-internal-report/excel${internalBase}`;
+            }
+            if (internalPdf) {
+                internalPdf.href = `/download-internal-report/pdf${internalBase}`;
+            }
+            document.getElementById('reportModal').classList.add('active');
+        }
+
+        function closeReportModal() {
+            document.getElementById('reportModal').classList.remove('active');
+        }
+
+        function closeModalOutside(e) {
+            if (e.target.id === 'reportModal') closeReportModal();
+        }
+
+        // Drag and drop
+        const dropZone = document.getElementById('dropZone');
+        if (dropZone) {
+            dropZone.addEventListener('dragover', function (e) {
+                e.preventDefault();
+                dropZone.classList.add('drag-over');
+            });
+            dropZone.addEventListener('dragleave', function () {
+                dropZone.classList.remove('drag-over');
+            });
+            dropZone.addEventListener('drop', function (e) {
+                e.preventDefault();
+                dropZone.classList.remove('drag-over');
+                const file = e.dataTransfer.files[0];
+                if (file && file.name.endsWith('.xlsx')) {
+                    const input = document.getElementById('ct1File');
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    input.files = dt.files;
+                    const text = document.getElementById('fileDropText');
+                    text.textContent = 'Selected: ' + file.name;
+                    text.style.color = '#1A2B4A';
+                    text.style.fontWeight = 'bold';
+                } else {
+                    alert('Please drop a valid .xlsx file.');
+                }
+            });
+        }
+    </script>
+
+    <script>
+        /* ═══════════════════════════════════════════════════════════
+           DEPARTMENT SUMMARY DOWNLOAD — JavaScript
+           Insert before </body>
+        ═══════════════════════════════════════════════════════════ */
+
+        function downloadSummary(fmt) {
+            // ── Read form values ─────────────────────────────────────
+            var semester = document.getElementById('sum_semester').value.trim();
+            var examType = document.getElementById('sum_exam_type').value.trim();
+            var dateFrom = document.getElementById('sum_date_from').value.trim();
+            var dateTo = document.getElementById('sum_date_to').value.trim();
+            var coordinator = document.getElementById('sum_coordinator').value.trim();
+            var dean = document.getElementById('sum_dean').value.trim();
+            var principal = document.getElementById('sum_principal').value.trim();
+
+            var statusBar = document.getElementById('summaryStatusBar');
+            var statusDot = document.getElementById('summaryStatusDot');
+            var statusText = document.getElementById('summaryStatusText');
+            var overlay = document.getElementById('summaryLoadingOverlay');
+            var btnExcel = document.getElementById('summaryBtnExcel');
+            var btnPdf = document.getElementById('summaryBtnPdf');
+
+            // ── Validate semester ────────────────────────────────────
+            if (!semester) {
+                statusDot.className = 'summary-status-dot dot-error';
+                statusText.textContent =
+                    'Please select a semester before downloading.';
+                statusBar.style.background = '#FEF2F2';
+                statusBar.style.borderColor = '#FCA5A5';
+                document.getElementById('sum_semester').focus();
+                return;
+            }
+
+            // ── Reset status to loading ──────────────────────────────
+            statusDot.className = 'summary-status-dot dot-loading';
+            statusText.textContent = 'Generating official summary report\u2026';
+            statusBar.style.background = '#FFFBEB';
+            statusBar.style.borderColor = '#FCD34D';
+
+            // ── Disable both buttons ─────────────────────────────────
+            btnExcel.disabled = true;
+            btnPdf.disabled = true;
+
+            // ── Show loading overlay ─────────────────────────────────
+            overlay.classList.add('active');
+
+            // ── Build query string ───────────────────────────────────
+            var params = new URLSearchParams({
+                semester_id: semester,
+                exam_type: examType,
+                date_from: dateFrom,
+                date_to: dateTo,
+                coordinator: coordinator,
+                dean: dean,
+                principal: principal,
+            });
+
+            // ── Resolve route ────────────────────────────────────────
+            var route = fmt === 'excel'
+                ? '/download-ct1-summary-excel'
+                : '/download-ct1-summary-pdf';
+
+            var url = route + '?' + params.toString();
+
+            // ── Use hidden iframe trick for file downloads ────────────
+            // This avoids page navigation and lets us detect completion
+            var frame = document.getElementById('summaryDownloadFrame');
+            if (!frame) {
+                frame = document.createElement('iframe');
+                frame.id = 'summaryDownloadFrame';
+                frame.name = 'summaryDownloadFrame';
+                frame.style.display = 'none';
+                document.body.appendChild(frame);
+            }
+
+            // ── Poll for download completion via timeout ──────────────
+            // Flask sends the file directly; we wait a safe interval
+            // then restore UI. For large reports, 4s is sufficient.
+            var restoreUI = function () {
+                overlay.classList.remove('active');
+                btnExcel.disabled = false;
+                btnPdf.disabled = false;
+                statusDot.className = 'summary-status-dot dot-ready';
+                statusText.textContent =
+                    'Report generated successfully. Ready for next download.';
+                statusBar.style.background = '#F0FDF4';
+                statusBar.style.borderColor = '#86EFAC';
+            };
+
+            // Navigate iframe to trigger download
+            frame.src = url;
+
+            // Restore UI after download is triggered
+            setTimeout(restoreUI, 4000);
+        }
+    </script>
+
+</body>
+
+</html>

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>External Marks Entry — ECE SMS</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ct1.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/external.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sms-theme.css') }}">
+</head>
+
+<body>
+
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="nav-brand-text">
+                <div class="nav-title">ECE Student Management System</div>
+                <div class="nav-sub">Dr. Babasaheb Ambedkar Technological University</div>
+            </div>
+        </div>
+        <div class="nav-links">
+            <a href="/">Dashboard</a>
+            <a href="/ct1">Internal Marks</a>
+            <a href="/external" class="active">External Marks</a>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <div class="page-header-inner">
+            <h1 class="page-title">External Marks Entry</h1>
+            <p class="page-sub">
+                Department of Electronics and Computer Engineering
+                &nbsp;&mdash;&nbsp; Academic Year {{ academic_year }}
+            </p>
+        </div>
+    </div>
+
+    <div class="container">
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">
+            <span>{{ message | safe }}</span>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <!-- STEP 1: Semester & Subject Selector -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Step 1 — Select Semester and Subject</h2>
+            </div>
+            <div class="card-body">
+                <form id="selectorForm" method="GET" action="/external">
+                    <div class="form-grid two-col">
+
+                        <div class="form-group">
+                            <label class="form-label">Semester</label>
+                            <select name="semester_id" class="form-control" required onchange="this.form.submit()">
+                                <option value="">-- Select Semester --</option>
+                                {% for sem in semesters %}
+                                <option value="{{ sem.semester_id }}" {% if sem.semester_id == selected_sem_id %}selected{% endif %}>
+                                    Semester {{ sem.semester_id }}
+                                    ({{ sem.academic_year }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        {% if selected_sem_id %}
+                        <div class="form-group">
+                            <label class="form-label">Subject</label>
+                            <select name="subject_code" class="form-control" required onchange="this.form.submit()">
+                                <option value="">-- Select Subject --</option>
+                                {% for subj in subjects %}
+                                <option value="{{ subj.subject_code }}" {% if subj.subject_code == selected_subject_code %}selected{% endif %}>
+                                    {{ subj.subject_code }} &mdash; {{ subj.subject_name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <input type="hidden" name="academic_year" value="{{ academic_year }}">
+                        </div>
+                        {% endif %}
+
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {% if selected_subject_code %}
+
+        {% set is_locked = (locked_count == total_students and total_students > 0) %}
+
+        <!-- STATUS BANNER -->
+        {% if is_locked %}
+        <div class="status-banner status-locked">
+            External Marks have been successfully submitted and locked for academic integrity.
+        </div>
+        {% else %}
+        <div class="status-banner status-open">
+            Marks for this subject are open. Complete the steps below to upload or enter external marks.
+        </div>
+        {% endif %}
+        <!-- STEP 2: Upload External Marks -->
+        {% if not is_locked %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Step 2 — Upload External Marks</h2>
+            </div>
+            <div class="card-body">
+                <!-- Part A: Download Template -->
+                <h3 style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: var(--text-1);">Part A — Download Blank Template</h3>
+                <p class="card-desc" style="margin-bottom: 12px;">
+                    Download the official external marks entry template pre-filled with
+                    enrolled student details. Enter marks in the designated column.
+                </p>
+                <div class="info-row" style="margin-bottom: 14px;">
+                    <span class="info-chip">
+                        Subject: {{ selected_subject_code }}
+                    </span>
+                    <span class="info-chip">
+                        Maximum Marks: 60
+                    </span>
+                    <span class="info-chip">
+                        Enrolled Students: {{ total_students }}
+                    </span>
+                </div>
+                <div class="btn-row" style="margin-bottom: 24px;">
+                    <a href="/download-external-template?subject_code={{ selected_subject_code }}&semester_id={{ selected_sem_id }}&academic_year={{ academic_year }}" class="btn btn-secondary">
+                        Download Blank Template
+                    </a>
+                </div>
+
+                <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+
+                <!-- Part B: Upload File -->
+                <h3 style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: var(--text-1);">Part B — Upload Completed Marks File</h3>
+                <p class="card-desc" style="margin-bottom: 12px;">
+                    Upload the completed Excel file. All entries will be validated
+                    before saving.
+                </p>
+                <form method="POST" action="/upload-external" enctype="multipart/form-data" id="uploadForm">
+                    <input type="hidden" name="subject_code" value="{{ selected_subject_code }}">
+                    <input type="hidden" name="semester_id" value="{{ selected_sem_id }}">
+                    <input type="hidden" name="academic_year" value="{{ academic_year }}">
+
+                    <div class="form-group" style="margin-bottom:16px;">
+                        <label class="form-label">Select Completed Excel File (.xlsx)</label>
+                        <div class="file-drop-zone" id="dropZone" onclick="document.getElementById('externalFile').click()">
+                            <div class="file-drop-text" id="fileDropText">
+                                Click to select file or drag and drop here
+                            </div>
+                            <input type="file" name="file" id="externalFile" accept=".xlsx" hidden
+                                onchange="updateFileName(this)">
+                        </div>
+                    </div>
+
+                    <div class="btn-row">
+                        <button type="submit" class="btn btn-primary" onclick="return confirm('Confirm submission of ESE marks?');">
+                            Submit External Marks
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- STEP 3: Download Reports -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Step 3 — Download Reports</h2>
+            </div>
+            <div class="card-body">
+                <p class="card-desc">
+                    Download the official ESE report in Excel or PDF format.
+                </p>
+                <div class="btn-row">
+                    <a href="/download-external-report/excel?subject_code={{ selected_subject_code }}&semester_id={{ selected_sem_id }}&academic_year={{ academic_year }}"
+                        class="btn btn-report-excel">
+                        Download External Report Excel
+                    </a>
+                    <a href="/download-external-report/pdf?subject_code={{ selected_subject_code }}&semester_id={{ selected_sem_id }}&academic_year={{ academic_year }}"
+                        class="btn btn-report-pdf">
+                        Download External Report PDF
+                    </a>
+                    <a href="{{ url_for('external.download_sgpa_cgpa_excel', semester_id=selected_sem_id, academic_year=academic_year) }}"
+                        class="btn btn-secondary">
+                        Download SGPA / CGPA Report
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        {% endif %}
+
+    </div>
+
+    <footer class="footer">
+        <div class="footer-inner">
+            ECE Student Management System &nbsp;&mdash;&nbsp;
+            Dr. Babasaheb Ambedkar Technological University &nbsp;&mdash;&nbsp;
+            Department of Electronics and Computer Engineering
+        </div>
+    </footer>
+
+    <script>
+        function updateFileName(input) {
+            const text = document.getElementById('fileDropText');
+            if (input.files && input.files[0]) {
+                text.textContent = 'Selected: ' + input.files[0].name;
+                text.style.color = '#1A2B4A';
+                text.style.fontWeight = 'bold';
+            }
+        }
+
+        // Drag and drop
+        const dropZone = document.getElementById('dropZone');
+        if (dropZone) {
+            dropZone.addEventListener('dragover', function (e) {
+                e.preventDefault();
+                dropZone.classList.add('drag-over');
+            });
+            dropZone.addEventListener('dragleave', function () {
+                dropZone.classList.remove('drag-over');
+            });
+            dropZone.addEventListener('drop', function (e) {
+                e.preventDefault();
+                dropZone.classList.remove('drag-over');
+                const file = e.dataTransfer.files[0];
+                if (file && file.name.endsWith('.xlsx')) {
+                    const input = document.getElementById('externalFile');
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    input.files = dt.files;
+                    const text = document.getElementById('fileDropText');
+                    text.textContent = 'Selected: ' + file.name;
+                    text.style.color = '#1A2B4A';
+                    text.style.fontWeight = 'bold';
+                } else {
+                    alert('Please drop a valid .xlsx file.');
+                }
+            });
+        }
+    </script>
+
+</body>
+
+</html>
