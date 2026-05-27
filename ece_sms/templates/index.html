@@ -60,6 +60,11 @@
                     External Marks
                     <span class="sb-badge new">ESE</span>
                 </a>
+                <a class="sb-nav-item" href="/lab">
+                    <span class="sb-icon">&#128300;</span>
+                    Lab Marks
+                    <span class="sb-badge new">Lab</span>
+                </a>
             </div>
 
             <div class="sb-divider"></div>
@@ -80,6 +85,16 @@
 
             <div class="sb-nav-section">
                 <span class="sb-nav-section-label">Department</span>
+                <a class="sb-nav-item" href="/electives">
+                    <span class="sb-icon">&#128736;</span>
+                    Elective Assignment
+                    <span class="sb-badge">Admin</span>
+                </a>
+                <a class="sb-nav-item" href="/batches">
+                    <span class="sb-icon">&#128101;</span>
+                    Batch / Division Setup
+                    <span class="sb-badge">Admin</span>
+                </a>
                 <button class="sb-nav-item" onclick="showSection('dept-summary')">
                     <span class="sb-icon">&#9782;</span>
                     Department Summary
@@ -201,6 +216,34 @@
                         </div>
                         <div class="action-card-arrow">Go to Marks Entry &rarr;</div>
                     </div>
+
+
+                    <a class="action-card gold-card" href="/electives" style="text-decoration:none;">
+                        <div class="action-card-icon">&#128736;</div>
+                        <div class="action-card-title">Elective Assignment</div>
+                        <div class="action-card-desc">
+                            Assign students to PEC, OEC, HSSMEC and other elective options safely.
+                        </div>
+                        <div class="action-card-arrow">Go to Elective Assignment &rarr;</div>
+                    </a>
+
+                    <a class="action-card forest-card" href="/lab" style="text-decoration:none;">
+                        <div class="action-card-icon">&#128300;</div>
+                        <div class="action-card-title">Lab Marks</div>
+                        <div class="action-card-desc">
+                            Upload CA1, CA2 and practical external marks for lab and project subjects.
+                        </div>
+                        <div class="action-card-arrow">Go to Lab Marks &rarr;</div>
+                    </a>
+
+                    <a class="action-card teal-card" href="/batches" style="text-decoration:none;">
+                        <div class="action-card-icon">&#128101;</div>
+                        <div class="action-card-title">Batch / Division Setup</div>
+                        <div class="action-card-desc">
+                            Assign students to Division A/B and practical batches before lab-wise templates.
+                        </div>
+                        <div class="action-card-arrow">Go to Batch Setup &rarr;</div>
+                    </a>
 
                     <div class="action-card teal-card" onclick="showSection('individual-report')">
                         <div class="action-card-icon">&#128196;</div>
@@ -500,7 +543,7 @@
                         <div class="form-grid form-grid-2" style="margin-bottom:20px;">
                             <div class="form-group">
                                 <label class="form-label">Semester <span class="req">*</span></label>
-                                <select class="form-control" id="int_semester">
+                                <select class="form-control" id="int_semester" onchange="loadSubjects('int_semester','int_subject')">
                                     <option value="">-- Select Semester --</option>
                                     {% for sem in all_semesters %}
                                     <option value="{{ sem.semester_id }}" {% if active_sem and
@@ -866,13 +909,43 @@
             }, 4200);
         }
 
-        function loadSubjects(semesterId, subjectId) {
+        async function loadSubjects(semesterId, subjectId) {
             const semester = document.getElementById(semesterId).value;
             const subject = document.getElementById(subjectId);
 
-            if (!semester || !subject) return;
+            if (!subject) return;
 
-            subject.selectedIndex = 0;
+            subject.innerHTML = '<option value="">Loading subjects...</option>';
+
+            if (!semester) {
+                subject.innerHTML = '<option value="">-- Select Subject --</option>';
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/theory-subjects?semester_id=${encodeURIComponent(semester)}`);
+                const data = await response.json();
+                const subjects = data.subjects || [];
+
+                subject.innerHTML = '<option value="">-- Select Subject --</option>';
+
+                if (subjects.length === 0) {
+                    const opt = document.createElement('option');
+                    opt.value = '';
+                    opt.textContent = 'No subjects found for this semester';
+                    subject.appendChild(opt);
+                    return;
+                }
+
+                subjects.forEach(subj => {
+                    const opt = document.createElement('option');
+                    opt.value = subj.subject_code;
+                    opt.textContent = `${subj.subject_code} — ${subj.subject_name}`;
+                    subject.appendChild(opt);
+                });
+            } catch (err) {
+                subject.innerHTML = '<option value="">Could not load subjects</option>';
+            }
         }
 
         // ── Highlight active nav on load ──────────────────────────────

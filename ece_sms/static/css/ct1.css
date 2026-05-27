@@ -129,6 +129,13 @@ body {
     color: #1A2B4A;
 }
 
+
+.alert-warning {
+    background: #FFF7E6;
+    border-color: #D97706;
+    color: #7C3E00;
+}
+
 /* ── CARDS ── */
 .card {
     background: #FFFFFF;

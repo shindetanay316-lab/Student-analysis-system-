@@ -304,6 +304,13 @@ body {
     border-color: var(--warning) !important;
 }
 
+
+.alert-warning {
+    background: var(--warning-bg) !important;
+    color: var(--warning) !important;
+    border-color: var(--warning) !important;
+}
+
 /* ── File Upload Box ───────────────────────────── */
 
 .file-drop-zone {

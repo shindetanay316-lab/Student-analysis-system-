@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lab Marks — ECE SMS</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ct1.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sms-theme.css') }}">
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="nav-brand-text">
+                <div class="nav-title">ECE Student Management System</div>
+                <div class="nav-sub">Lab / Project Marks Module</div>
+            </div>
+        </div>
+        <div class="nav-links">
+            <a href="/">Dashboard</a>
+            <a href="/ct1">Internal Marks</a>
+            <a href="/external">External Marks</a>
+            <a href="/lab" class="active">Lab Marks</a>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <div class="page-header-inner">
+            <h1 class="page-title">Lab / Project Marks Entry</h1>
+            <p class="page-sub">
+                CA1 /30 + CA2 /30 = Internal /60 &nbsp;&mdash;&nbsp; External /40 &nbsp;&mdash;&nbsp; Total /100
+            </p>
+        </div>
+    </div>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">
+            <span>{{ message | safe }}</span>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Step 1 — Select Semester and Lab / Project Subject</h2>
+            </div>
+            <div class="card-body">
+                <form method="GET" action="/lab">
+                    <div class="form-grid two-col">
+                        <div class="form-group">
+                            <label class="form-label">Semester</label>
+                            <select name="semester_id" class="form-control" required onchange="this.form.submit()">
+                                <option value="">-- Select Semester --</option>
+                                {% for sem in semesters %}
+                                <option value="{{ sem.semester_id }}" {% if sem.semester_id == selected_semester %}selected{% endif %}>
+                                    Semester {{ sem.semester_id }} ({{ sem.academic_year }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        {% if selected_semester %}
+                        <div class="form-group">
+                            <label class="form-label">Lab / Project Subject</label>
+                            <select name="subject_code" class="form-control" required onchange="this.form.submit()">
+                                <option value="">-- Select Lab / Project Subject --</option>
+                                {% for subj in subjects %}
+                                <option value="{{ subj.subject_code }}" {% if subj.subject_code == selected_subject_code %}selected{% endif %}>
+                                    {{ subj.subject_code }} — {{ subj.subject_name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <input type="hidden" name="semester_id" value="{{ selected_semester }}">
+                            <input type="hidden" name="academic_year" value="{{ academic_year }}">
+                    <input type="hidden" name="division" value="{{ selected_division }}">
+                    <input type="hidden" name="batch" value="{{ selected_batch }}">
+                        </div>
+                        {% endif %}
+
+                        {% if selected_semester %}
+                        <div class="form-group">
+                            <label class="form-label">Division Filter</label>
+                            <select name="division" class="form-control" onchange="this.form.submit()">
+                                <option value="">All Divisions</option>
+                                {% for div in division_options %}
+                                <option value="{{ div }}" {% if selected_division == div %}selected{% endif %}>Division {{ div }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Batch Filter</label>
+                            <select name="batch" class="form-control" onchange="this.form.submit()">
+                                <option value="">All Batches</option>
+                                {% for b in batch_options %}
+                                <option value="{{ b }}" {% if selected_batch == b %}selected{% endif %}>Batch {{ b }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {% if selected_subject %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Selected Lab / Project Subject</h2>
+            </div>
+            <div class="card-body">
+                <div class="subject-info-bar">
+                    <div class="sib-item">
+                        <span class="sib-label">Subject Code</span>
+                        <span class="sib-value">{{ selected_subject.subject_code }}</span>
+                    </div>
+                    <div class="sib-item">
+                        <span class="sib-label">Subject Name</span>
+                        <span class="sib-value">{{ selected_subject.subject_name }}</span>
+                    </div>
+                    <div class="sib-item">
+                        <span class="sib-label">Credits</span>
+                        <span class="sib-value">{{ selected_subject.credits }}</span>
+                    </div>
+                    <div class="sib-item">
+                        <span class="sib-label">Academic Year</span>
+                        <span class="sib-value">{{ academic_year }}</span>
+                    </div>
+                </div>
+
+                <div class="info-row" style="margin-top:18px;">
+                    <span class="info-chip">Total Students: {{ total_students }}</span>
+                    <span class="info-chip">Filter: {{ batch_label }}</span>
+                    <span class="info-chip">Entered: {{ entered_count }}</span>
+                    <span class="info-chip">Pass: {{ pass_count }}</span>
+                    <span class="info-chip">Fail: {{ fail_count }}</span>
+                    <span class="info-chip">Pending: {{ pending_count }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Step 2 — Download Lab Marks Template</h2>
+            </div>
+            <div class="card-body">
+                <p class="card-desc">
+                    The template contains enrolled students and columns for CA1, CA2 and External lab marks.
+                </p>
+                <div class="btn-row">
+                    <a class="btn btn-secondary" href="/download-lab-template?subject_code={{ selected_subject.subject_code }}&semester_id={{ selected_semester }}&academic_year={{ academic_year }}&division={{ selected_division }}&batch={{ selected_batch }}">
+                        Download Lab Template
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Step 3 — Upload Completed Lab Marks File</h2>
+            </div>
+            <div class="card-body">
+                <p class="card-desc">
+                    Upload the completed Excel file. CA1 must be 0–30, CA2 must be 0–30, and External must be 0–40.
+                </p>
+                <form method="POST" action="/upload-lab" enctype="multipart/form-data">
+                    <input type="hidden" name="subject_code" value="{{ selected_subject.subject_code }}">
+                    <input type="hidden" name="semester_id" value="{{ selected_semester }}">
+                    <input type="hidden" name="academic_year" value="{{ academic_year }}">
+
+                    <div class="form-group" style="margin-bottom:16px;">
+                        <label class="form-label">Select Completed Lab Excel File (.xlsx)</label>
+                        <input type="file" name="lab_file" accept=".xlsx" class="form-control" required>
+                    </div>
+
+                    <div class="btn-row">
+                        <button type="submit" class="btn btn-primary" onclick="return confirm('Upload and calculate lab marks for this subject?')">
+                            Upload Lab Marks
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Step 4 — Download Lab Report</h2>
+            </div>
+            <div class="card-body">
+                <p class="card-desc">
+                    Download official lab marks reports with common college header and logos.
+                </p>
+                <div class="btn-row">
+                    <a class="btn btn-report-excel" href="/download-lab-report/excel?subject_code={{ selected_subject.subject_code }}&semester_id={{ selected_semester }}&academic_year={{ academic_year }}&division={{ selected_division }}&batch={{ selected_batch }}">
+                        Download Lab Excel Report
+                    </a>
+                    <a class="btn btn-report-pdf" href="/download-lab-report/pdf?subject_code={{ selected_subject.subject_code }}&semester_id={{ selected_semester }}&academic_year={{ academic_year }}&division={{ selected_division }}&batch={{ selected_batch }}">
+                        Download Lab PDF Report
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        {% if students_data %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Current Lab Marks Status</h2>
+            </div>
+            <div class="card-body" style="overflow-x:auto;">
+                <table class="data-table" style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr>
+                            <th>SR</th>
+                            <th>PRN</th>
+                            <th>Student Name</th>
+                            <th>CA1 /30</th>
+                            <th>CA2 /30</th>
+                            <th>Internal /60</th>
+                            <th>External /40</th>
+                            <th>Total /100</th>
+                            <th>Grade</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in students_data %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ row.prn }}</td>
+                            <td>{{ row.name }}</td>
+                            <td>{{ row.ca1 if row.ca1 is not none else '—' }}</td>
+                            <td>{{ row.ca2 if row.ca2 is not none else '—' }}</td>
+                            <td>{{ row.internal if row.internal is not none else '—' }}</td>
+                            <td>{{ row.external if row.external is not none else '—' }}</td>
+                            <td>{{ row.total_marks if row.total_marks is not none else '—' }}</td>
+                            <td>{{ row.grade if row.grade else '—' }}</td>
+                            <td>{{ row.status }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+        {% endif %}
+    </div>
+
+    <footer class="footer">
+        <div class="footer-inner">
+            ECE Student Management System — Lab / Project Marks Module
+        </div>
+    </footer>
+</body>
+
+</html>

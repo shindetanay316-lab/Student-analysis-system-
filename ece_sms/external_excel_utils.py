@@ -116,7 +116,7 @@ def generate_external_template(meta, students):
     row = 8
     ws[f"A{row}"] = "Exam Date :"
     ws.merge_cells(f"B{row}:E{row}")
-    ws[f"B{row}"] = meta.get('exam_date', 'N/A')
+    ws[f"B{row}"] = meta.get('exam_date', 'N/A') + (" | " + meta.get("batch_label", "All Students") if meta.get("batch_label") else "")
 
     for r in range(6, 9):
         for c in range(1, 6):
@@ -281,85 +281,13 @@ def parse_external_upload(file_obj, subject_code, semester_id, academic_year):
     return True, records, len(records)
 
 def generate_external_excel_report(meta, data):
+    """External marks Excel report with the same logo/college header style."""
     wb = Workbook()
     ws = wb.active
     ws.title = "External Report"
 
-    # Colours
-    h_fill  = PatternFill("solid", fgColor="1E3A5F")
-    p_fill  = PatternFill("solid", fgColor="D5F5E3")
-    f_fill  = PatternFill("solid", fgColor="FADBD8")
-    w_font  = Font(color="FFFFFF", bold=True, size=10)
-    b_font  = Font(bold=True, size=10)
-    thin    = Border(left=Side(style="thin"), right=Side(style="thin"),
-                     top=Side(style="thin"),  bottom=Side(style="thin"))
-    ca      = Alignment(horizontal="center", vertical="center")
-
-    # Title rows
-    ws.merge_cells("A1:I1")
-    ws["A1"] = "CSMSS Chh. Shahu College of Engineering — ECE Dept."
-    ws["A1"].font = Font(name=TNR, bold=True, size=13, color="1E3A5F")
-    ws["A1"].alignment = ca
-
-    ws.merge_cells("A2:I2")
-    ws["A2"] = (f"External Marks Report  |  {meta['subject_code']} — {meta['subject_name']}  "
-                f"|  Semester {meta['semester_id']}  |  A.Y. {meta['academic_year']}")
-    ws["A2"].font = Font(name=TNR, bold=True, size=10)
-    ws["A2"].alignment = ca
-
-    hdrs = ["SR", "PRN", "Student Name", "Internal (/40)", "External (/60)", "Total (/100)", "Grade", "Grade Point", "Result"]
-    for c, h in enumerate(hdrs, 1):
-        cell = ws.cell(row=4, column=c, value=h)
-        cell.font = w_font; cell.fill = h_fill; cell.border = thin; cell.alignment = ca
-
-    pass_c = fail_c = 0
-    marks_list = []
-
-    for i, s in enumerate(data, 1):
-        row = 4 + i
-        ext = s["external"]
-        internal = s["internal"]
-        total = s["total"]
-        status = s["status"]
-
-        fill = p_fill if status == "PASS" else (f_fill if status == "FAIL" else None)
-
-        ws.cell(row=row, column=1, value=i).alignment = ca
-        ws.cell(row=row, column=2, value=s["prn"])
-        ws.cell(row=row, column=3, value=s["name"])
-        ws.cell(row=row, column=4, value=internal if internal is not None else "—").alignment = ca
-        ws.cell(row=row, column=5, value=ext if ext is not None else "—").alignment = ca
-        ws.cell(row=row, column=6, value=total if total is not None else "—").alignment = ca
-        ws.cell(row=row, column=7, value=s["grade"] or "—").alignment = ca
-        ws.cell(row=row, column=8, value=s["grade_point"] if s["grade_point"] is not None else "—").alignment = ca
-        ws.cell(row=row, column=9, value=status).alignment = ca
-
-        for c in range(1, 10):
-            cell = ws.cell(row=row, column=c)
-            cell.border = thin
-            cell.font = _body_font(10)
-            if fill: cell.fill = fill
-
-        if ext is not None:
-            marks_list.append(ext)
-            if status == "PASS": pass_c += 1
-            else:         fail_c += 1
-
-    # Summary row
-    sr = 4 + len(data) + 2
-    ws.cell(row=sr, column=1, value="SUMMARY").font = b_font
-    ws.cell(row=sr, column=2, value=f"Total: {len(data)}")
-    ws.cell(row=sr, column=3, value=f"Entered: {len(marks_list)}")
-    ws.cell(row=sr, column=4, value=f"Pass: {pass_c}  |  Fail: {fail_c}")
-    ws.cell(row=sr, column=5, value=f"Pass%: {round(pass_c/len(marks_list)*100,1) if marks_list else 0}%")
-    ws.cell(row=sr, column=6, value=f"Highest: {max(marks_list) if marks_list else '—'}")
-    ws.cell(row=sr, column=7, value=f"Avg: {round(sum(marks_list)/len(marks_list),2) if marks_list else '—'}")
-    ws.cell(row=sr, column=8, value="")
-    ws.cell(row=sr, column=9, value="")
-
-    for c_idx in range(1, 10):
-        ws.cell(row=sr, column=c_idx).border = thin
-        ws.cell(row=sr, column=c_idx).font = b_font
+    last_col = 9
+    last_letter = "I"
 
     ws.column_dimensions["A"].width = 6
     ws.column_dimensions["B"].width = 16
@@ -370,6 +298,165 @@ def generate_external_excel_report(meta, data):
     ws.column_dimensions["G"].width = 12
     ws.column_dimensions["H"].width = 14
     ws.column_dimensions["I"].width = 14
+
+    # ===== COMMON LOGO HEADER =====
+    if os.path.exists(LEFT_LOGO):
+        left_logo = Image(LEFT_LOGO)
+        left_logo.width = 85
+        left_logo.height = 85
+        ws.add_image(left_logo, "A1")
+
+    if os.path.exists(RIGHT_LOGO):
+        right_logo = Image(RIGHT_LOGO)
+        right_logo.width = 85
+        right_logo.height = 85
+        ws.add_image(right_logo, "I1")
+
+    ws.merge_cells("B1:H1")
+    c = ws["B1"]
+    c.value = (
+        "Chhatrapati Shahu Maharaj Shikshan Sanstha's\n"
+        "CSMSS Chh. Shahu College of Engineering\n"
+        "Kanchanwadi, Chhatrapati Sambhajinagar – 431011\n"
+        "Department of Electronics and Computer Engineering"
+    )
+    c.font = Font(name=TNR, size=13, bold=True)
+    c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    c.border = _thick_border()
+    ws.row_dimensions[1].height = 95
+    ws.row_dimensions[2].height = 6
+
+    for row in range(1, 2):
+        for col in range(1, last_col + 1):
+            ws.cell(row=row, column=col).border = _thick_border()
+
+    # ===== REPORT TITLE =====
+    ws.merge_cells("A3:I3")
+    ws["A3"] = "External Marks Report" + (" — " + meta.get("batch_label", "All Students") if meta.get("batch_label") else "")
+    ws["A3"].font = Font(name=TNR, size=12, bold=True)
+    ws["A3"].alignment = _center()
+    ws["A3"].border = _thick_border()
+
+    ws.merge_cells("A4:B4")
+    ws["A4"] = "Subject Code :"
+    ws.merge_cells("C4:D4")
+    ws["C4"] = meta['subject_code']
+    ws.merge_cells("E4:F4")
+    ws["E4"] = "Subject Name :"
+    ws.merge_cells("G4:I4")
+    ws["G4"] = meta['subject_name']
+
+    ws.merge_cells("A5:B5")
+    ws["A5"] = "Semester :"
+    ws.merge_cells("C5:D5")
+    ws["C5"] = meta['semester_id']
+    ws.merge_cells("E5:F5")
+    ws["E5"] = "Academic Year :"
+    ws.merge_cells("G5:I5")
+    ws["G5"] = meta['academic_year']
+
+    for r in range(4, 6):
+        for cidx in range(1, last_col + 1):
+            cell = ws.cell(r, cidx)
+            cell.border = _thick_border()
+            cell.font = _body_font(10, bold=cidx in [1, 5])
+            cell.alignment = _left() if cidx in [1, 5] else _center()
+
+    # ===== TABLE =====
+    hdrs = [
+        "SR", "PRN", "Student Name", "Internal (/40)", "External (/60)",
+        "Total (/100)", "Grade", "Grade Point", "Result"
+    ]
+    hr = 7
+    header_fill = PatternFill("solid", fgColor="D9EAF7")
+    pass_fill = PatternFill("solid", fgColor="D5F5E3")
+    fail_fill = PatternFill("solid", fgColor="FADBD8")
+    pending_fill = PatternFill("solid", fgColor="F2F3F4")
+
+    for cidx, h in enumerate(hdrs, 1):
+        cell = ws.cell(row=hr, column=cidx, value=h)
+        cell.font = Font(name=TNR, bold=True, size=10)
+        cell.fill = header_fill
+        cell.border = _thick_border()
+        cell.alignment = _center()
+
+    pass_c = fail_c = pending_c = 0
+    marks_list = []
+
+    for i, s in enumerate(data, 1):
+        row = hr + i
+        ext = s["external"]
+        internal = s["internal"]
+        total = s["total"]
+        status = s["status"]
+
+        fill = pass_fill if status == "PASS" else (fail_fill if status == "FAIL" else pending_fill)
+
+        values = [
+            i,
+            s["prn"],
+            s["name"],
+            internal if internal is not None else "—",
+            ext if ext is not None else "—",
+            total if total is not None else "—",
+            s["grade"] or "—",
+            s["grade_point"] if s["grade_point"] is not None else "—",
+            status,
+        ]
+
+        for cidx, value in enumerate(values, 1):
+            cell = ws.cell(row=row, column=cidx, value=value)
+            cell.font = _body_font(10)
+            cell.alignment = _center() if cidx != 3 else _left()
+            cell.border = _thin_border()
+            cell.fill = fill
+
+        if ext is not None:
+            marks_list.append(ext)
+        if status == "PASS":
+            pass_c += 1
+        elif status == "FAIL":
+            fail_c += 1
+        else:
+            pending_c += 1
+
+    # ===== SUMMARY =====
+    sr = hr + len(data) + 2
+    ws.merge_cells(start_row=sr, start_column=1, end_row=sr, end_column=9)
+    ws.cell(row=sr, column=1).value = (
+        f"Summary: Total {len(data)} | Entered {len(marks_list)} | "
+        f"Pass {pass_c} | Fail {fail_c} | Pending {pending_c} | "
+        f"Pass% {round(pass_c/len(marks_list)*100,1) if marks_list else 0}% | "
+        f"Highest {max(marks_list) if marks_list else '—'} | "
+        f"Lowest {min(marks_list) if marks_list else '—'} | "
+        f"Average {round(sum(marks_list)/len(marks_list),2) if marks_list else '—'}"
+    )
+    ws.cell(row=sr, column=1).font = Font(name=TNR, bold=True, size=10)
+    ws.cell(row=sr, column=1).alignment = _center()
+    ws.cell(row=sr, column=1).border = _thick_border()
+
+    # ===== SIGNATURES =====
+    sig_row = sr + 3
+    ws.row_dimensions[sig_row].height = 60
+    ws.merge_cells(f"A{sig_row}:C{sig_row}")
+    ws.merge_cells(f"D{sig_row}:F{sig_row}")
+    ws.merge_cells(f"G{sig_row}:I{sig_row}")
+
+    ws[f"A{sig_row}"] = "Subject Teacher"
+    ws[f"D{sig_row}"] = "HOD"
+    ws[f"G{sig_row}"] = "Principal"
+
+    for cell_ref in [f"A{sig_row}", f"D{sig_row}", f"G{sig_row}"]:
+        cell = ws[cell_ref]
+        cell.font = Font(name=TNR, size=11, bold=True)
+        cell.alignment = Alignment(horizontal="center", vertical="bottom", wrap_text=True)
+        cell.border = _thick_border()
+
+    footer_row = sig_row + 2
+    ws.merge_cells(f"A{footer_row}:I{footer_row}")
+    ws[f"A{footer_row}"] = "Generated by ECE Student Management System — CSMSS Chh. Shahu College of Engineering"
+    ws[f"A{footer_row}"].font = Font(name=TNR, size=9, italic=True)
+    ws[f"A{footer_row}"].alignment = _center()
 
     output = io.BytesIO()
     wb.save(output)

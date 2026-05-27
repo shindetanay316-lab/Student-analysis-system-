@@ -401,6 +401,9 @@ def _fmt_mark(v):
 #  INTERNAL MARKS REPORT — PDF
 # ══════════════════════════════════════════════════════════════
 def generate_internal_pdf(meta, data):
+    """
+    Internal marks PDF report with common logo header and corrected CA1/CA2/MSE columns.
+    """
     buf = io.BytesIO()
 
     doc = SimpleDocTemplate(
@@ -415,222 +418,111 @@ def generate_internal_pdf(meta, data):
     story = []
     page_width = A4[0] - 3.0 * cm
 
-    # ─────────────────────────────────────────────
-    # Styles (BLACK / PRINT FRIENDLY)
-    # ─────────────────────────────────────────────
-    s_college = _style(
-        "int_college",
-        font=TNR_BOLD,
-        size=14,
-        color=C_BLACK,
-        align=TA_CENTER,
-        leading=18,
-    )
+    s_college = _style("int_college", font=TNR_BOLD, size=13, color=C_BLACK, align=TA_CENTER, leading=17)
+    s_dept = _style("int_dept", font=TNR_BOLD, size=10, color=C_BLACK, align=TA_CENTER, leading=14)
+    s_label = _style("int_label", font=TNR_BOLD, size=8, color=C_BLACK, align=TA_LEFT, leading=12)
+    s_value = _style("int_value", font=TNR, size=8, color=C_BLACK, align=TA_LEFT, leading=12)
+    s_th = _style("int_th", font=TNR_BOLD, size=6.5, color=C_BLACK, align=TA_CENTER, leading=8)
+    s_td = _style("int_td", font=TNR, size=6.5, color=C_BLACK, align=TA_CENTER, leading=8)
+    s_td_l = _style("int_tdl", font=TNR, size=6.5, color=C_BLACK, align=TA_LEFT, leading=8)
+    s_sig = _style("int_sig", font=TNR_BOLD, size=9, color=C_BLACK, align=TA_CENTER, leading=13)
 
-    s_dept = _style(
-        "int_dept",
-        font=TNR_BOLD,
-        size=10,
-        color=C_BLACK,
-        align=TA_CENTER,
-        leading=14,
-    )
-
-    s_label = _style(
-        "int_label",
-        font=TNR_BOLD,
-        size=8,
-        color=C_BLACK,
-        align=TA_LEFT,
-        leading=12,
-    )
-
-    s_value = _style(
-        "int_value",
-        font=TNR,
-        size=8,
-        color=C_BLACK,
-        align=TA_LEFT,
-        leading=12,
-    )
-
-    s_th = _style(
-        "int_th",
-        font=TNR_BOLD,
-        size=7,
-        color=C_BLACK,
-        align=TA_CENTER,
-        leading=10,
-    )
-
-    s_td = _style(
-        "int_td",
-        font=TNR,
-        size=7,
-        color=C_BLACK,
-        align=TA_CENTER,
-        leading=10,
-    )
-
-    s_td_l = _style(
-        "int_tdl",
-        font=TNR,
-        size=7,
-        color=C_BLACK,
-        align=TA_LEFT,
-        leading=10,
-    )
-
-    s_sig = _style(
-        "int_sig",
-        font=TNR_BOLD,
-        size=9,
-        color=C_BLACK,
-        align=TA_CENTER,
-        leading=13,
-    )
-
-    # ─────────────────────────────────────────────
-    # Header with Logos
-    # ─────────────────────────────────────────────
-    left_logo = (
-        Image(LEFT_LOGO, width=55, height=55)
-        if os.path.exists(LEFT_LOGO)
-        else ""
-    )
-
-    right_logo = (
-        Image(RIGHT_LOGO, width=55, height=55)
-        if os.path.exists(RIGHT_LOGO)
-        else ""
-    )
-
+    # ── Common Header with Logos ─────────────────────────────
+    left_logo = Image(LEFT_LOGO, width=55, height=55) if os.path.exists(LEFT_LOGO) else ""
+    right_logo = Image(RIGHT_LOGO, width=55, height=55) if os.path.exists(RIGHT_LOGO) else ""
 
     header = Table(
         [[
             left_logo,
-            Paragraph("CSMSS Chh. Shahu College of Engineering", s_college),
-            right_logo
+            Paragraph(
+                "Chhatrapati Shahu Maharaj Shikshan Sanstha's<br/>"
+                "CSMSS Chh. Shahu College of Engineering<br/>"
+                "Kanchanwadi, Chhatrapati Sambhajinagar – 431011<br/>"
+                "Department of Electronics and Computer Engineering",
+                s_college,
+            ),
+            right_logo,
         ]],
-        colWidths=[1.8 * cm, page_width - 3.6 * cm, 1.8 * cm]
+        colWidths=[2 * cm, page_width - 4 * cm, 2 * cm]
     )
-
     header.setStyle(TableStyle([
-        ("BOX", (0, 0), (-1, -1), 1.2, colors.black),
+        ("BOX", (0, 0), (-1, -1), 1.0, colors.black),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (1, 0), (1, 0), "CENTER"),
-        ("TOPPADDING", (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
-
     story.append(header)
+    story.append(Spacer(1, 8))
 
-    dept_tab = Table(
-        [[Paragraph(
-            "Department of Electronics and Computer Engineering",
-            s_dept
-        )]],
-        colWidths=[page_width],
-    )
-
-    dept_tab.setStyle(TableStyle([
+    title_tab = Table([[Paragraph("Internal Marks Report", s_dept)]], colWidths=[page_width])
+    title_tab.setStyle(TableStyle([
         ("BOX", (0, 0), (-1, -1), 1.0, colors.black),
         ("TOPPADDING", (0, 0), (-1, -1), 5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
     ]))
-
-    story.append(dept_tab)
+    story.append(title_tab)
     story.append(Spacer(1, 8))
 
-    # ─────────────────────────────────────────────
-    # Metadata
-    # ─────────────────────────────────────────────
+    # ── Metadata ─────────────────────────────────────────────
     cw = page_width / 6
-    col_widths_meta = [
-        cw * 0.75,
-        cw * 1.25,
-        cw * 0.75,
-        cw * 1.25,
-        cw * 0.75,
-        cw * 1.25,
-    ]
-
+    col_widths_meta = [cw * 0.75, cw * 1.25, cw * 0.75, cw * 1.25, cw * 0.75, cw * 1.25]
     meta_data = [
         [
-            Paragraph("Subject Code :", s_label),
-            Paragraph(meta['subject_code'], s_value),
-            Paragraph("Subject Name :", s_label),
-            Paragraph(meta['subject_name'], s_value),
-            Paragraph("Semester :", s_label),
-            Paragraph(str(meta['semester_id']), s_value),
+            Paragraph("Subject Code :", s_label), Paragraph(meta['subject_code'], s_value),
+            Paragraph("Subject Name :", s_label), Paragraph(meta['subject_name'], s_value),
+            Paragraph("Semester :", s_label), Paragraph(str(meta['semester_id']), s_value),
         ],
         [
-            Paragraph("Academic Year :", s_label),
-            Paragraph(meta['academic_year'], s_value),
-            Paragraph("", s_value),
-            Paragraph("", s_value),
-            Paragraph("", s_value),
-            Paragraph("", s_value),
+            Paragraph("Academic Year :", s_label), Paragraph(meta['academic_year'], s_value),
+            Paragraph("Formula :", s_label), Paragraph("CA1 + CA2 + MSE", s_value),
+            Paragraph("Max Marks :", s_label), Paragraph("40", s_value),
         ],
     ]
-
     info_tab = Table(meta_data, colWidths=col_widths_meta)
-
     info_tab.setStyle(TableStyle([
         ("GRID", (0, 0), (-1, -1), 1.0, colors.black),
-        ("SPAN", (1, 1), (5, 1)),
         ("TOPPADDING", (0, 0), (-1, -1), 4),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]))
-
     story.append(info_tab)
     story.append(Spacer(1, 8))
 
-    # ─────────────────────────────────────────────
-    # Marks Table
-    # ─────────────────────────────────────────────
+    # ── Marks Table ──────────────────────────────────────────
     headers = [
-        "SR", "PRN", "NAME", "CT1", "CT2",
-        "BEST CT", "ASSIGN", "CA", "MIDSEM", "INTERNAL"
+        "SR", "PRN", "NAME", "CT1", "CT2", "ASSIGNMENT",
+        "CA1", "CA2", "MSE", "INTERNAL (/40)"
     ]
-
     col_headers = [Paragraph(h, s_th) for h in headers]
-
     col_widths = [
         page_width * 0.05,
-        page_width * 0.11,
-        page_width * 0.19,
-        page_width * 0.08,
-        page_width * 0.08,
-        page_width * 0.08,
-        page_width * 0.09,
+        page_width * 0.12,
+        page_width * 0.18,
+        page_width * 0.07,
+        page_width * 0.07,
+        page_width * 0.10,
+        page_width * 0.07,
         page_width * 0.07,
         page_width * 0.08,
-        page_width * 0.17,
+        page_width * 0.19,
     ]
 
     table_data = [col_headers]
-
     for d in data:
         table_data.append([
             Paragraph(str(d['sr']), s_td),
             Paragraph(str(d['prn']), s_td),
             Paragraph(str(d['name']), s_td_l),
-            Paragraph(_fmt_mark(d['ct1']), s_td),
-            Paragraph(_fmt_mark(d['ct2']), s_td),
-            Paragraph(_fmt_mark(d['best_ct']), s_td),
-            Paragraph(_fmt_mark(d['assignment']), s_td),
-            Paragraph(_fmt_mark(d['ca']), s_td),
-            Paragraph(_fmt_mark(d['midsem']), s_td),
-            Paragraph(_fmt_mark(d['internal']), s_td),
+            Paragraph(_fmt_mark(d.get('ct1')), s_td),
+            Paragraph(_fmt_mark(d.get('ct2')), s_td),
+            Paragraph(_fmt_mark(d.get('assignment')), s_td),
+            Paragraph(_fmt_mark(d.get('ca1', d.get('best_ct'))), s_td),
+            Paragraph(_fmt_mark(d.get('ca2', 0)), s_td),
+            Paragraph(_fmt_mark(d.get('mse', d.get('midsem'))), s_td),
+            Paragraph(_fmt_mark(d.get('internal')), s_td),
         ])
 
-    marks_tab = Table(
-        table_data,
-        colWidths=col_widths,
-        repeatRows=1
-    )
-
+    marks_tab = Table(table_data, colWidths=col_widths, repeatRows=1)
     marks_tab.setStyle(TableStyle([
         ("GRID", (0, 0), (-1, -1), 0.8, colors.black),
         ("BOX", (0, 0), (-1, -1), 1.2, colors.black),
@@ -638,23 +530,18 @@ def generate_internal_pdf(meta, data):
         ("TOPPADDING", (0, 0), (-1, -1), 4),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]))
-
     story.append(marks_tab)
-
     story.append(Spacer(1, 30))
 
-    # ─────────────────────────────────────────────
-    # Signatures
-    # ─────────────────────────────────────────────
+    # ── Signatures ───────────────────────────────────────────
     sig_tab = Table(
         [[
             Paragraph("Subject Teacher", s_sig),
-            Paragraph("Prof. A. V. Khake<br/>Class Teacher", s_sig),
-            Paragraph("Dr. D. L. Bhuyar<br/>HOD", s_sig),
+            Paragraph(meta.get('class_teacher', 'Class Teacher'), s_sig),
+            Paragraph(meta.get('hod', 'HOD'), s_sig),
         ]],
         colWidths=[page_width / 3] * 3,
     )
-
     sig_tab.setStyle(TableStyle([
         ("LINEABOVE", (0, 0), (-1, -1), 1.0, colors.black),
         ("LINEBEFORE", (1, 0), (1, -1), 0.8, colors.black),
@@ -663,28 +550,14 @@ def generate_internal_pdf(meta, data):
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
     ]))
-
     story.append(sig_tab)
 
-    # ─────────────────────────────────────────────
-    # Build PDF
-    # ─────────────────────────────────────────────
-    doc.build(
-        story,
-        onFirstPage=_footer,
-        onLaterPages=_footer
-    )
-
+    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     buf.seek(0)
 
     subj_clean = _sanitize(meta['subject_name'])
     ay_clean = meta['academic_year'].replace('-', '_')
-
-    filename = (
-        f"{subj_clean}_Internal_"
-        f"Sem{meta['semester_id']}_{ay_clean}.pdf"
-    )
-
+    filename = f"{subj_clean}_Internal_Sem{meta['semester_id']}_{ay_clean}.pdf"
     return buf, filename
 
 # ══════════════════════════════════════════════════════════════

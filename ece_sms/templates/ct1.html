@@ -103,6 +103,33 @@
                         </div>
                         {% endif %}
 
+                        {% if selected_semester %}
+                        <div class="form-group">
+                            <label class="form-label">Division Filter</label>
+                            <select name="division" class="form-control" onchange="this.form.submit()">
+                                <option value="">All Divisions</option>
+                                {% for div in division_options %}
+                                <option value="{{ div }}" {% if selected_division == div %}selected{% endif %}>Division {{ div }}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="hidden" name="semester_id" value="{{ selected_semester }}">
+                            {% if selected_exam %}<input type="hidden" name="exam_type" value="{{ selected_exam }}">{% endif %}
+                            {% if selected_code %}<input type="hidden" name="subject_code" value="{{ selected_code }}">{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Batch Filter</label>
+                            <select name="batch" class="form-control" onchange="this.form.submit()">
+                                <option value="">All Batches</option>
+                                {% for b in batch_options %}
+                                <option value="{{ b }}" {% if selected_batch == b %}selected{% endif %}>Batch {{ b }}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="hidden" name="semester_id" value="{{ selected_semester }}">
+                            {% if selected_exam %}<input type="hidden" name="exam_type" value="{{ selected_exam }}">{% endif %}
+                            {% if selected_code %}<input type="hidden" name="subject_code" value="{{ selected_code }}">{% endif %}
+                        </div>
+                        {% endif %}
+
                     </div>
                 </form>
             </div>
@@ -165,6 +192,9 @@
                     </span>
                     <span class="info-chip">
                         Subject: {{ selected_code }}
+                    </span>
+                    <span class="info-chip">
+                        Filter: {{ (selected_division and ('Division ' ~ selected_division) or 'All Divisions') }}{% if selected_batch %} | Batch {{ selected_batch }}{% endif %}
                     </span>
                     <span class="info-chip" id="maxMarksChip">
                         Maximum Marks:
@@ -279,11 +309,11 @@
                     Download consolidated internal marks for the selected subject.
                 </p>
                 <div class="btn-row">
-                    <a href="/download-internal-report/excel?subject_code={{ selected_code }}&semester_id={{ selected_semester }}"
+                    <a href="/download-internal-report/excel?subject_code={{ selected_code }}&semester_id={{ selected_semester }}&division={{ selected_division }}&batch={{ selected_batch }}"
                         class="btn btn-report-excel">
                         Download Internal Excel
                     </a>
-                    <a href="/download-internal-report/pdf?subject_code={{ selected_code }}&semester_id={{ selected_semester }}"
+                    <a href="/download-internal-report/pdf?subject_code={{ selected_code }}&semester_id={{ selected_semester }}&division={{ selected_division }}&batch={{ selected_batch }}"
                         class="btn btn-report-pdf">
                         Download Internal PDF
                     </a>
@@ -529,6 +559,8 @@
         const SELECTED_CODE = "{{ selected_code or '' }}";
         const SELECTED_EXAM = "{{ selected_exam or '' }}";
         const SELECTED_SEM = "{{ selected_semester or '' }}";
+        const SELECTED_DIVISION = "{{ selected_division or '' }}";
+        const SELECTED_BATCH = "{{ selected_batch or '' }}";
 
         function downloadTemplate() {
             const teacher = document.getElementById('teacherName')
@@ -542,6 +574,8 @@
             const url = `/download-ct1-template?subject_code=${SELECTED_CODE}`
                 + `&exam_type=${SELECTED_EXAM}`
                 + `&semester_id=${SELECTED_SEM}`
+                + `&division=${encodeURIComponent(SELECTED_DIVISION)}`
+                + `&batch=${encodeURIComponent(SELECTED_BATCH)}`
                 + `&subject_teacher=${encodeURIComponent(teacher)}`
                 + `&exam_date=${encodeURIComponent(date)}`;
             window.location.href = url;
@@ -578,9 +612,13 @@
         function openReportModal() {
             const base = `?subject_code=${SELECTED_CODE}`
                 + `&exam_type=${SELECTED_EXAM}`
-                + `&semester_id=${SELECTED_SEM}`;
+                + `&semester_id=${SELECTED_SEM}`
+                + `&division=${encodeURIComponent(SELECTED_DIVISION)}`
+                + `&batch=${encodeURIComponent(SELECTED_BATCH)}`;
             const internalBase = `?subject_code=${SELECTED_CODE}`
-                + `&semester_id=${SELECTED_SEM}`;
+                + `&semester_id=${SELECTED_SEM}`
+                + `&division=${encodeURIComponent(SELECTED_DIVISION)}`
+                + `&batch=${encodeURIComponent(SELECTED_BATCH)}`;
             document.getElementById('excelReportBtn').href = `/download-ct1-report/excel${base}`;
             document.getElementById('pdfReportBtn').href = `/download-ct1-report/pdf${base}`;
             const internalExcel = document.getElementById('internalExcelBtn');

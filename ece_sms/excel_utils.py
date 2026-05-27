@@ -7,7 +7,6 @@ from openpyxl import load_workbook, Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 from models import db, Student, TheoryMarks, Enrollment
-import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -311,7 +310,9 @@ def parse_ct1_upload(file_obj, subject_code, semester_id,
     count = 0
     for rec in records:
         existing = TheoryMarks.query.filter_by(
-            prn=rec['prn'], subject_code=subject_code,
+            prn=rec['prn'],
+            subject_code=subject_code,
+            semester_id=semester_id,
             academic_year=academic_year
         ).first()
         if existing:
@@ -579,25 +580,21 @@ def generate_ct1_excel_report(meta, data):
 #  INTERNAL MARKS REPORT — EXCEL
 # ══════════════════════════════════════════════════════════════
 def generate_internal_excel(meta, data):
+    """
+    Internal marks Excel report with common college/logo header.
+
+    Corrected visible formula:
+      CA1 = highest of CT1, CT2, Assignment
+      CA2 = second-highest of CT1, CT2, Assignment
+      Internal (/40) = CA1 + CA2 + MSE
+    """
     from openpyxl.drawing.image import Image
 
     wb = Workbook()
     ws = wb.active
     ws.title = "Internal Marks"
 
-    # ===== LOGOS =====
-    left_logo = Image(LEFT_LOGO)
-    right_logo = Image(RIGHT_LOGO)
-
-    left_logo.width = 85
-    left_logo.height = 85
-    right_logo.width = 85
-    right_logo.height = 85
-
-    ws.add_image(left_logo, "A1")
-    ws.add_image(right_logo, "I1")
-
-    last_col = 9
+    last_col = 10
     last_letter = get_column_letter(last_col)
 
     ws.column_dimensions['A'].width = 8
@@ -606,21 +603,36 @@ def generate_internal_excel(meta, data):
     for col in range(4, last_col + 1):
         ws.column_dimensions[get_column_letter(col)].width = 13
 
-    # ===== HEADER =====
-    ws.merge_cells('B1:H1')
+    # ===== COMMON LOGO HEADER =====
+    if os.path.exists(LEFT_LOGO):
+        left_logo = Image(LEFT_LOGO)
+        left_logo.width = 85
+        left_logo.height = 85
+        ws.add_image(left_logo, "A1")
+
+    if os.path.exists(RIGHT_LOGO):
+        right_logo = Image(RIGHT_LOGO)
+        right_logo.width = 85
+        right_logo.height = 85
+        ws.add_image(right_logo, f"{last_letter}1")
+
+    ws.merge_cells(f'B1:{get_column_letter(last_col-1)}1')
     c = ws['B1']
     c.value = (
         "Chhatrapati Shahu Maharaj Shikshan Sanstha's\n"
         "CSMSS Chh. Shahu College of Engineering\n"
-        "Kanchanwadi, Chhatrapati Sambhajinagar\n"
+        "Kanchanwadi, Chhatrapati Sambhajinagar – 431011\n"
         "Department of Electronics and Computer Engineering"
     )
     c.font = Font(name=TNR, size=13, bold=True)
     c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
     c.border = _thin_border()
     ws.row_dimensions[1].height = 95
-
     ws.row_dimensions[2].height = 6
+
+    for row in range(1, 2):
+        for col in range(1, last_col + 1):
+            ws.cell(row=row, column=col).border = _thin_border()
 
     # ===== SUBJECT INFO =====
     ws.merge_cells('A3:B3')
@@ -637,7 +649,7 @@ def generate_internal_excel(meta, data):
     ws['E3'].font = Font(name=TNR, size=10, bold=True)
     ws['E3'].border = _thin_border()
 
-    ws.merge_cells('G3:I3')
+    ws.merge_cells(f'G3:{last_letter}3')
     ws['G3'] = meta['subject_name']
     ws['G3'].border = _thin_border()
 
@@ -655,17 +667,21 @@ def generate_internal_excel(meta, data):
     ws['E4'].font = Font(name=TNR, size=10, bold=True)
     ws['E4'].border = _thin_border()
 
-    ws.merge_cells('G4:I4')
+    ws.merge_cells(f'G4:{last_letter}4')
     ws['G4'] = meta['academic_year']
     ws['G4'].border = _thin_border()
+
+    for r in range(3, 5):
+        for col in range(1, last_col + 1):
+            ws.cell(r, col).border = _thin_border()
+            ws.cell(r, col).alignment = _center() if col not in [1, 5] else _left()
 
     # ===== TABLE HEADER =====
     hr = 6
     headers = [
         'SR', 'PRN', 'NAME',
-        'CT1', 'CT2',
-        'ASSIGNMENT', 'CA',
-        'MIDSEM', 'INTERNAL'
+        'CT1', 'CT2', 'ASSIGNMENT',
+        'CA1', 'CA2', 'MSE', 'INTERNAL (/40)'
     ]
 
     for col, hdr in enumerate(headers, 1):
@@ -677,17 +693,17 @@ def generate_internal_excel(meta, data):
     # ===== DATA =====
     for d in data:
         row_idx = hr + d['sr']
-
         vals = [
             d['sr'],
             d['prn'],
             d['name'],
-            d['ct1'],
-            d['ct2'],
-            d['assignment'],
-            d['ca'],
-            d['midsem'],
-            d['internal']
+            d.get('ct1'),
+            d.get('ct2'),
+            d.get('assignment'),
+            d.get('ca1', d.get('best_ct')),
+            d.get('ca2', 0),
+            d.get('mse', d.get('midsem')),
+            d.get('internal')
         ]
 
         for col, val in enumerate(vals, 1):
@@ -702,24 +718,20 @@ def generate_internal_excel(meta, data):
 
     ws.merge_cells(f'A{sig_row}:C{sig_row}')
     ws.merge_cells(f'D{sig_row}:F{sig_row}')
-    ws.merge_cells(f'G{sig_row}:I{sig_row}')
+    ws.merge_cells(f'G{sig_row}:{last_letter}{sig_row}')
 
     ws[f'A{sig_row}'] = "Subject Teacher"
-    ws[f'D{sig_row}'] = "Prof. A. V. Khake\nClass Teacher"
-    ws[f'G{sig_row}'] = "Dr. D. L. Bhuyar\nHOD"
+    ws[f'D{sig_row}'] = meta.get('class_teacher', 'Class Teacher')
+    ws[f'G{sig_row}'] = meta.get('hod', 'HOD')
 
     for cell in [f'A{sig_row}', f'D{sig_row}', f'G{sig_row}']:
         ws[cell].font = Font(name=TNR, size=11, bold=True)
-        ws[cell].alignment = Alignment(
-            horizontal='center',
-            vertical='bottom',
-            wrap_text=True
-        )
+        ws[cell].alignment = Alignment(horizontal='center', vertical='bottom', wrap_text=True)
         ws[cell].border = _thick_border()
 
     # ===== FOOTER =====
     footer_row = sig_row + 2
-    ws.merge_cells(f'A{footer_row}:I{footer_row}')
+    ws.merge_cells(f'A{footer_row}:{last_letter}{footer_row}')
     ws[f'A{footer_row}'] = (
         "Generated by ECE Student Management System — "
         "CSMSS Chh. Shahu College of Engineering"
@@ -729,14 +741,13 @@ def generate_internal_excel(meta, data):
 
     subj_clean = _sanitize(meta['subject_name'])
     ay_clean = meta['academic_year'].replace('-', '_')
-
     filename = f"{subj_clean}_Internal_Sem{meta['semester_id']}_{ay_clean}.xlsx"
 
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-
     return buf, filename
+
 # ══════════════════════════════════════════════════════════════
 #  DEPARTMENT CT1 SUMMARY REPORT — EXCEL
 #  Append after all existing functions in excel_utils.py

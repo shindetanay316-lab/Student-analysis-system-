@@ -1,4 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
+from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 db = SQLAlchemy()
@@ -11,12 +12,16 @@ class Student(db.Model):
     prn               = db.Column(db.String(20), primary_key=True)
     name              = db.Column(db.String(100), nullable=False)
     year_of_admission = db.Column(db.Integer, nullable=False)
+    division          = db.Column(db.String(10), nullable=True)   # e.g. A / B
+    batch             = db.Column(db.String(10), nullable=True)   # e.g. A1 / A2 / B1
 
     def to_dict(self):
         return {
             'prn':               self.prn,
             'name':              self.name,
-            'year_of_admission': self.year_of_admission
+            'year_of_admission': self.year_of_admission,
+            'division':          self.division,
+            'batch':             self.batch
         }
 
 
@@ -55,8 +60,10 @@ class Subject(db.Model):
     t_hours     = db.Column(db.Integer, default=0)
     p_hours     = db.Column(db.Integer, default=0)
     category    = db.Column(db.String(20), default='')
-    is_elective = db.Column(db.Boolean, default=False)
-    is_audit    = db.Column(db.Boolean, default=False)
+    is_elective          = db.Column(db.Boolean, default=False)
+    elective_group       = db.Column(db.String(50), nullable=True)
+    parent_subject_code  = db.Column(db.String(20), nullable=True)
+    is_audit             = db.Column(db.Boolean, default=False)
 
     def to_dict(self):
         return {
@@ -66,8 +73,10 @@ class Subject(db.Model):
             'subject_type': self.subject_type,
             'credits':      self.credits,
             'category':     self.category,
-            'is_elective':  self.is_elective,
-            'is_audit':     self.is_audit
+            'is_elective':         self.is_elective,
+            'elective_group':      self.elective_group,
+            'parent_subject_code': self.parent_subject_code,
+            'is_audit':            self.is_audit
         }
 
 
@@ -171,8 +180,13 @@ class LabMarks(db.Model):
     semester_id   = db.Column(db.Integer, nullable=False)
     academic_year = db.Column(db.String(10), nullable=False)
 
-    internal    = db.Column(db.Numeric(5, 2), default=None)
-    external    = db.Column(db.Numeric(5, 2), default=None)
+    # Raw lab marks entered through Lab Marks module
+    # CA1 + CA2 becomes internal marks (/60)
+    ca1         = db.Column(db.Numeric(5, 2), default=None)   # /30
+    ca2         = db.Column(db.Numeric(5, 2), default=None)   # /30
+
+    internal    = db.Column(db.Numeric(5, 2), default=None)   # ca1 + ca2 = /60
+    external    = db.Column(db.Numeric(5, 2), default=None)   # /40
     total_marks = db.Column(db.Numeric(5, 2), default=None)
     grade       = db.Column(db.String(4),     default=None)
     grade_point = db.Column(db.Numeric(4, 2), default=None)
@@ -189,6 +203,8 @@ class LabMarks(db.Model):
             'subject_code':  self.subject_code,
             'semester_id':   self.semester_id,
             'academic_year': self.academic_year,
+            'ca1':           f(self.ca1),
+            'ca2':           f(self.ca2),
             'internal':      f(self.internal),
             'external':      f(self.external),
             'total_marks':   f(self.total_marks),
@@ -265,7 +281,7 @@ class SgpaCgpa(db.Model):
 
 
 # ── TABLE 9: users ───────────────────────────────────────────
-class User(db.Model):
+class User(UserMixin, db.Model):
     __tablename__ = 'users'
 
     user_id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -274,6 +290,9 @@ class User(db.Model):
     role              = db.Column(db.Enum('ADMIN', 'TEACHER'), nullable=False)
     assigned_subjects = db.Column(db.Text, default=None)
     is_active         = db.Column(db.Boolean, default=True)
+
+    def get_id(self):
+        return str(self.user_id)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)

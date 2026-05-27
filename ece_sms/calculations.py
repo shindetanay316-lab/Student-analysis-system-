@@ -58,20 +58,24 @@ def compute_final_result(internal_marks: float, external_marks: float, credits: 
       internal, external, total, grade, grade_point,
       credits_registered, credits_earned, is_passed, fail_reason
     """
-    internal = float(internal_marks) if internal_marks is not None else 0.0
+    internal = float(internal_marks) if internal_marks is not None else None
     external = float(external_marks) if external_marks is not None else None
 
     result = {
-        "internal":           round(internal, 1),
+        "internal":           round(internal, 1) if internal is not None else None,
         "external":           round(external, 1) if external is not None else None,
         "total":              None,
         "grade":              None,
         "grade_point":        None,
         "credits_registered": credits,
         "credits_earned":     0,
-        "is_passed":          False,
+        "is_passed":          None,
         "fail_reason":        None,
     }
+
+    if internal is None:
+        result["fail_reason"] = "Internal marks not complete"
+        return result
 
     if external is None:
         result["fail_reason"] = "External marks not entered"
@@ -103,6 +107,71 @@ def compute_final_result(internal_marks: float, external_marks: float, credits: 
         result["grade_point"]    = gp
         result["credits_earned"] = credits
         result["fail_reason"]    = None
+
+    return result
+
+
+def compute_lab_result(ca1_marks: float, ca2_marks: float, external_marks: float, credits: int):
+    """
+    Lab / Project result formula.
+
+    CA1      = /30
+    CA2      = /30
+    Internal = CA1 + CA2 = /60
+    External = /40
+    Total    = /100
+
+    Pass condition:
+      Total >= 40
+
+    Returns dict with internal, external, total, grade, grade_point,
+    credits_registered, credits_earned, is_passed, fail_reason.
+    """
+    ca1 = float(ca1_marks) if ca1_marks is not None else None
+    ca2 = float(ca2_marks) if ca2_marks is not None else None
+    external = float(external_marks) if external_marks is not None else None
+
+    result = {
+        "ca1": ca1,
+        "ca2": ca2,
+        "internal": None,
+        "external": round(external, 1) if external is not None else None,
+        "total": None,
+        "grade": None,
+        "grade_point": None,
+        "credits_registered": credits,
+        "credits_earned": 0,
+        "is_passed": None,
+        "fail_reason": None,
+    }
+
+    if ca1 is None or ca2 is None:
+        result["fail_reason"] = "CA1/CA2 marks not entered"
+        return result
+
+    if external is None:
+        result["fail_reason"] = "External lab marks not entered"
+        return result
+
+    internal = ca1 + ca2
+    total = internal + external
+
+    result["internal"] = round(internal, 1)
+    result["total"] = round(total, 1)
+
+    if total < 40.0:
+        result["grade"] = "EF"
+        result["grade_point"] = Decimal("0.0")
+        result["is_passed"] = False
+        result["credits_earned"] = 0
+        result["fail_reason"] = f"Total below 40 (got {total}/100)"
+    else:
+        grade, gp = get_grade(total)
+        result["grade"] = grade
+        result["grade_point"] = gp
+        result["is_passed"] = True
+        result["credits_earned"] = credits
+        result["fail_reason"] = None
 
     return result
 
@@ -216,28 +285,62 @@ def update_sgpa_cgpa_for_student(prn, semester_id, academic_year, db, models):
             elif ext_row and ext_row.external_marks is not None:
                 ext_val = float(ext_row.external_marks)
 
-            if tm_row is None or tm_row.internal_total is None or ext_val is None:
+            if (
+                tm_row is None
+                or not is_theory_internal_complete(tm_row)
+                or tm_row.internal_total is None
+                or ext_val is None
+            ):
                 has_missing_marks = True
             else:
                 internal_val = float(tm_row.internal_total)
                 res = compute_final_result(internal_val, ext_val, subj.credits)
-                subject_results.append(res)
+                if res["is_passed"] is None:
+                    has_missing_marks = True
+                else:
+                    subject_results.append(res)
         else:
             # LAB, PROJECT, etc.
+            # Formula: CA1 /30 + CA2 /30 = Internal /60, External /40, Total /100
             lm_row = models.LabMarks.query.filter_by(
                 prn=prn,
                 subject_code=subj.subject_code,
+                semester_id=semester_id,
                 academic_year=academic_year,
             ).first()
 
-            if lm_row is None or lm_row.internal is None or lm_row.external is None:
+            if lm_row is None or lm_row.external is None:
                 has_missing_marks = True
             else:
-                subject_results.append({
-                    "credits_registered": subj.credits,
-                    "grade_point": float(lm_row.grade_point) if lm_row.grade_point is not None else 0.0,
-                    "is_passed": lm_row.is_passed
-                })
+                ca1 = getattr(lm_row, "ca1", None)
+                ca2 = getattr(lm_row, "ca2", None)
+
+                # New preferred formula: ca1 + ca2.
+                # Compatibility: if an older row has only internal/external, keep using internal.
+                if ca1 is not None and ca2 is not None:
+                    lab_res = compute_lab_result(ca1, ca2, lm_row.external, subj.credits)
+                    lm_row.internal = lab_res["internal"]
+                    lm_row.total_marks = lab_res["total"]
+                    lm_row.grade = lab_res["grade"]
+                    lm_row.grade_point = lab_res["grade_point"]
+                    lm_row.is_passed = lab_res["is_passed"]
+                    subject_results.append(lab_res)
+                elif lm_row.internal is not None:
+                    total = float(lm_row.internal) + float(lm_row.external)
+                    if lm_row.grade_point is None or lm_row.total_marks is None:
+                        grade, gp = get_grade(total) if total >= 40 else ("EF", Decimal("0.0"))
+                        lm_row.total_marks = round(total, 2)
+                        lm_row.grade = grade
+                        lm_row.grade_point = gp
+                        lm_row.is_passed = total >= 40
+                    subject_results.append({
+                        "credits_registered": subj.credits,
+                        "credits_earned": subj.credits if lm_row.is_passed else 0,
+                        "grade_point": float(lm_row.grade_point) if lm_row.grade_point is not None else 0.0,
+                        "is_passed": lm_row.is_passed
+                    })
+                else:
+                    has_missing_marks = True
 
     # 2. Upsert into sgpa_cgpa table for THIS semester
     row = models.SgpaCgpa.query.filter_by(
@@ -268,7 +371,15 @@ def update_sgpa_cgpa_for_student(prn, semester_id, academic_year, db, models):
         row.credits_registered = cr_reg
         row.credits_earned     = cr_earned
 
-    # 3. Recalculate CGPA across ALL semesters for this student
+    # 3. Recalculate CGPA correctly for each semester row.
+    #
+    # IMPORTANT:
+    # Old logic calculated one latest CGPA and copied it to every semester row.
+    # Correct logic stores historical cumulative CGPA:
+    #   Sem 3 row -> CGPA up to Sem 3 only
+    #   Sem 4 row -> CGPA up to Sem 4 only
+    #   Sem 5 row -> CGPA up to Sem 5 only
+    #   Sem 6 row -> CGPA up to Sem 6 only
     all_sem_rows = (
         models.SgpaCgpa.query
         .filter_by(prn=prn)
@@ -276,30 +387,43 @@ def update_sgpa_cgpa_for_student(prn, semester_id, academic_year, db, models):
         .all()
     )
 
-    total_credit_points = Decimal("0.0")
-    total_registered_credits = 0
+    running_credit_points = Decimal("0.0")
+    running_registered_credits = 0
+    cgpa_for_requested_semester = None
 
     for s in all_sem_rows:
-        if s.sgpa is not None:
-            cr = int(s.credits_registered)
-            sg = Decimal(str(s.sgpa))
-            total_credit_points += cr * sg
-            total_registered_credits += cr
+        # If SGPA is pending for this semester, CGPA for this exact row is also pending.
+        # Do not use future semester SGPA to fill an older/pending row.
+        if s.sgpa is None:
+            s.cgpa = None
+            if s.semester_id == semester_id and s.academic_year == academic_year:
+                cgpa_for_requested_semester = None
+            continue
 
-    if total_registered_credits == 0:
-        cgpa = None
-    else:
-        cgpa = (total_credit_points / total_registered_credits).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        cr = int(s.credits_registered or 0)
+        if cr <= 0:
+            s.cgpa = None
+            if s.semester_id == semester_id and s.academic_year == academic_year:
+                cgpa_for_requested_semester = None
+            continue
 
-    # Update CGPA on all semester rows (cumulative)
-    for s in all_sem_rows:
-        s.cgpa = cgpa
+        sg = Decimal(str(s.sgpa))
+        running_credit_points += cr * sg
+        running_registered_credits += cr
+
+        current_cgpa = (running_credit_points / running_registered_credits).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        s.cgpa = current_cgpa
+
+        if s.semester_id == semester_id and s.academic_year == academic_year:
+            cgpa_for_requested_semester = current_cgpa
 
     db.session.commit()
 
     return {
         "sgpa":               float(sgpa) if sgpa is not None else None,
-        "cgpa":               float(cgpa) if cgpa is not None else None,
+        "cgpa":               float(cgpa_for_requested_semester) if cgpa_for_requested_semester is not None else None,
         "credits_registered": cr_reg,
         "credits_earned":     cr_earned,
     }
@@ -330,15 +454,63 @@ def validate_external_marks(value, subject_type="THEORY"):
     return True, None
 
 
+
+def validate_lab_component(value, max_marks, label):
+    """Validate one lab component mark."""
+    if value is None or str(value).strip() == "":
+        return False, f"{label} cannot be empty"
+    try:
+        v = float(value)
+    except (ValueError, TypeError):
+        return False, f"{label} must be a valid number"
+    if not (0.0 <= v <= float(max_marks)):
+        return False, f"{label} must be 0-{max_marks} (got {v})"
+    return True, None
+
+
+def is_theory_internal_complete(row):
+    """Return True only when all theory internal components are present.
+
+    This keeps final result/SGPA as PENDING when CT1/CT2/Assignment/Midsem
+    are not fully uploaded yet, instead of treating missing components as 0.
+    """
+    return all(
+        getattr(row, field, None) is not None
+        for field in ("ct1", "ct2", "assignment", "midsem")
+    )
+
+
 def update_internal_totals(row):
+    """
+    DBATU internal formula for THEORY subjects.
+
+    CT1        = /10
+    CT2        = /10
+    Assignment = /10
+    MSE/Midsem = /20
+
+    CA1 = highest score among CT1, CT2, Assignment
+    CA2 = second-highest score among CT1, CT2, Assignment
+    Internal Total = CA1 + CA2 + MSE  (/40)
+
+    Existing DB columns are reused:
+      best_ct        -> CA1
+      ca_marks       -> CA1 + CA2
+      internal_total -> CA1 + CA2 + MSE
+    """
     ct1 = float(row.ct1 or 0)
     ct2 = float(row.ct2 or 0)
     assignment = float(row.assignment or 0)
     midsem = float(row.midsem or 0)
 
-    row.best_ct = max(ct1, ct2)
-    row.ca_marks = row.best_ct + assignment
-    row.internal_total = row.ca_marks + midsem
+    scores = sorted([ct1, ct2, assignment], reverse=True)
+
+    ca1 = scores[0]
+    ca2 = scores[1]
+
+    row.best_ct = round(ca1, 2)
+    row.ca_marks = round(ca1 + ca2, 2)
+    row.internal_total = round(ca1 + ca2 + midsem, 2)
 
     return row
 

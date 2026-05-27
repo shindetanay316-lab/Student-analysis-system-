@@ -1,7 +1,21 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from config import Config
-from models import db, Student, Subject, Semester, TheoryMarks, Enrollment
+from models import db, Student, Subject, Semester, TheoryMarks, Enrollment, User
+from batch_utils import (
+    clean_filter, apply_student_batch_filters, batch_label,
+    DIVISION_OPTIONS, BATCH_OPTIONS
+)
+from academic_utils import (
+    get_academic_year_for_semester,
+    visible_theory_subjects_query,
+    visible_lab_subjects_query,
+)
+from stability_utils import clean_exam_type
+
+
+login_manager = LoginManager()
 
 def create_app():
     app = Flask(__name__)
@@ -12,8 +26,29 @@ def create_app():
 
     db.init_app(app)
 
+    login_manager.init_app(app)
+    login_manager.login_view = 'login'
+    login_manager.login_message = 'Please login first.'
+    login_manager.login_message_category = 'error'
+
+    @login_manager.user_loader
+    def load_user(user_id):
+        try:
+            return User.query.get(int(user_id))
+        except (TypeError, ValueError):
+            return None
+
     from routes_external import external_bp
     app.register_blueprint(external_bp)
+
+    from routes_lab import lab_bp
+    app.register_blueprint(lab_bp)
+
+    from routes_electives import electives_bp
+    app.register_blueprint(electives_bp)
+
+    from routes_batches import batches_bp
+    app.register_blueprint(batches_bp)
 
     return app
 
@@ -32,6 +67,8 @@ EXAM_MAX_MARKS = {
     'CT1': 10, 'CT2': 10, 'ASSIGNMENT': 10, 'MIDSEM': 20
 }
 
+VALID_EXAM_TYPES = {e['value'] for e in EXAM_TYPES}
+
 
 class _ET:
     def __init__(self, d):
@@ -41,24 +78,62 @@ class _ET:
 
 app = create_app()
 
+
+def _visible_marks_subject_filter(semester_id):
+    """Subjects shown in marks pages using the shared database-driven rule."""
+    return visible_theory_subjects_query(semester_id)
+
+
+def _academic_year_for_semester(semester_id=None, fallback='2024-25'):
+    return get_academic_year_for_semester(semester_id, fallback)
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+
+        user = User.query.filter_by(username=username).first()
+        if not user or not user.check_password(password):
+            flash('Invalid username or password.', 'error')
+            return redirect(url_for('login'))
+
+        if not user.is_active:
+            flash('This account is inactive.', 'error')
+            return redirect(url_for('login'))
+
+        login_user(user)
+        flash('Login successful.', 'success')
+        return redirect(url_for('index'))
+
+    return render_template('login.html')
+
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('Logged out successfully.', 'success')
+    return redirect(url_for('login'))
+
+
 # ══════════════════════════════════════════════════════════════
 #  DASHBOARD — INDEX ROUTE
-#  Paste immediately after:  app = create_app()
 # ══════════════════════════════════════════════════════════════
 
 @app.route('/')
+@login_required
 def index():
-    from models import Student, Subject, Semester, TheoryMarks, Enrollment
-
-    academic_map = {
-        3: '2024-25', 4: '2024-25',
-        5: '2025-26', 6: '2025-26',
-        7: '2026-27', 8: '2026-27',
-    }
-
     # Active semester
     active_sem = Semester.query.filter_by(is_active=True).first()
-    academic_year = app.config.get('CURRENT_ACADEMIC_YEAR', '2024-25')
+    academic_year = _academic_year_for_semester(
+        active_sem.semester_id if active_sem else None,
+        app.config.get('CURRENT_ACADEMIC_YEAR', '2024-25')
+    )
 
     # Counts for stat cards
     student_count = Student.query.count()
@@ -73,13 +148,9 @@ def index():
     locked_count = 0
 
     if active_sem:
-        theory_subjects = Subject.query.filter_by(
-            semester_id  = active_sem.semester_id,
-            subject_type = 'THEORY',
-            is_audit     = False
-        ).order_by(Subject.subject_code).all()
+        theory_subjects = _visible_marks_subject_filter(active_sem.semester_id).all()
 
-        sem_academic_year = academic_map.get(
+        sem_academic_year = _academic_year_for_semester(
             active_sem.semester_id, academic_year
         )
 
@@ -93,6 +164,10 @@ def index():
             if locked:
                 locked_count += 1
 
+    lab_subjects = []
+    if active_sem:
+        lab_subjects = visible_lab_subjects_query(active_sem.semester_id).all()
+
     all_semesters = Semester.query.order_by(Semester.semester_id).all()
 
     return render_template(
@@ -103,31 +178,69 @@ def index():
         student_count   = student_count,
         subject_count   = subject_count,
         theory_subjects = theory_subjects,
+        lab_subjects    = lab_subjects,
+        lab_count       = len(lab_subjects),
         ct1_lock        = ct1_lock,
         locked_count    = locked_count,
     )
 
+
+@app.route('/api/theory-subjects')
+@login_required
+def api_theory_subjects():
+    """Return visible theory subjects for dashboard dropdowns.
+
+    Used by the dashboard report forms so changing the semester refreshes
+    the subject list instead of leaving old active-semester subjects selected.
+    """
+    semester_id = request.args.get('semester_id', type=int)
+    if not semester_id:
+        return jsonify({'subjects': []})
+
+    subjects = visible_theory_subjects_query(semester_id).all()
+    return jsonify({
+        'subjects': [
+            {
+                'subject_code': subj.subject_code,
+                'subject_name': subj.subject_name,
+                'credits': int(subj.credits or 0),
+                'category': subj.category or '',
+            }
+            for subj in subjects
+        ]
+    })
+
+
+@app.route('/api/lab-subjects')
+@login_required
+def api_lab_subjects():
+    """Return visible lab/project subjects for future dashboard dropdowns."""
+    semester_id = request.args.get('semester_id', type=int)
+    if not semester_id:
+        return jsonify({'subjects': []})
+
+    subjects = visible_lab_subjects_query(semester_id).all()
+    return jsonify({
+        'subjects': [
+            {
+                'subject_code': subj.subject_code,
+                'subject_name': subj.subject_name,
+                'credits': int(subj.credits or 0),
+                'category': subj.category or '',
+            }
+            for subj in subjects
+        ]
+    })
+
 @app.route('/ct1')
+@login_required
 def ct1_page():
 
     selected_semester = request.args.get(
         'semester_id',
         type=int
     )
-
-    academic_map = {
-        3: '2024-25',
-        4: '2024-25',
-        5: '2025-26',
-        6: '2025-26',
-        7: '2026-27',
-        8: '2026-27'
-    }
-
-    academic_year = academic_map.get(
-        selected_semester,
-        '2024-25'
-    )
+    academic_year = _academic_year_for_semester(selected_semester)
 
     all_semesters = Semester.query.order_by(
         Semester.semester_id
@@ -135,26 +248,26 @@ def ct1_page():
 
     exam_types = [_ET(e) for e in EXAM_TYPES]
 
-    selected_exam = request.args.get(
+    raw_exam = request.args.get(
         'exam_type',
         ''
     ).strip().upper()
+    selected_exam = clean_exam_type(raw_exam, VALID_EXAM_TYPES, default='') if raw_exam else ''
 
     selected_code = request.args.get(
         'subject_code',
         ''
     ).strip()
 
+    selected_division = clean_filter(request.args.get('division', ''))
+    selected_batch = clean_filter(request.args.get('batch', ''))
+
     subjects = []
     lock_status = {}
     selected_exam_label = ''
 
     if selected_semester and selected_exam:
-        subjects = Subject.query.filter_by(
-            semester_id  = selected_semester,
-            subject_type = 'THEORY',
-            is_audit     = False
-        ).order_by(Subject.subject_code).all()
+        subjects = _visible_marks_subject_filter(selected_semester).all()
 
         for et in EXAM_TYPES:
             if et['value'] == selected_exam:
@@ -178,31 +291,26 @@ def ct1_page():
         selected_exam        = selected_exam,
         selected_exam_label  = selected_exam_label,
         selected_code        = selected_code,
+        selected_division    = selected_division,
+        selected_batch       = selected_batch,
+        division_options     = DIVISION_OPTIONS,
+        batch_options        = BATCH_OPTIONS,
     )
 
 
 @app.route('/download-ct1-template')
+@login_required
 def download_ct1_template():
     from excel_utils import generate_ct1_template
 
     subject_code    = request.args.get('subject_code', '').strip()
     subject_teacher = request.args.get('subject_teacher', '').strip()
     exam_date       = request.args.get('exam_date', '').strip()
-    exam_type       = request.args.get('exam_type', 'CT1').strip().upper()
+    exam_type       = clean_exam_type(request.args.get('exam_type', 'CT1'), VALID_EXAM_TYPES)
     semester_id     = request.args.get('semester_id', type=int)
-    academic_map = {
-        3: '2024-25',
-        4: '2024-25',
-        5: '2025-26',
-        6: '2025-26',
-        7: '2026-27',
-        8: '2026-27'
-    }
-
-    academic_year = academic_map.get(
-        semester_id,
-        '2024-25'
-    )
+    division        = clean_filter(request.args.get('division', ''))
+    batch           = clean_filter(request.args.get('batch', ''))
+    academic_year = _academic_year_for_semester(semester_id)
     if not subject_code:
         flash('Please select a subject first.', 'error')
         return redirect(url_for('ct1_page'))
@@ -212,21 +320,28 @@ def download_ct1_template():
         flash('Subject not found.', 'error')
         return redirect(url_for('ct1_page'))
 
-    enrolled = (
-    db.session.query(Student)
-    .join(Enrollment, Enrollment.prn == Student.prn)
-    .filter(
-        Enrollment.subject_code == subject_code,
-        Enrollment.semester_id == semester_id,
-        Enrollment.academic_year == academic_year
+    enrolled_query = (
+        db.session.query(Student)
+        .join(Enrollment, Enrollment.prn == Student.prn)
+        .filter(
+            Enrollment.subject_code == subject_code,
+            Enrollment.semester_id == semester_id,
+            Enrollment.academic_year == academic_year
+        )
     )
-    .order_by(Student.prn)
-    .all()
-    )
+    enrolled_query = apply_student_batch_filters(enrolled_query, Student, division, batch)
+    enrolled = enrolled_query.order_by(Student.prn).all()
 
     if not enrolled:
-        flash('No students enrolled in this subject.', 'error')
-        return redirect(url_for('ct1_page'))
+        flash('No students found for this subject and selected division/batch filter.', 'error')
+        return redirect(url_for(
+            'ct1_page',
+            semester_id=semester_id,
+            exam_type=exam_type,
+            subject_code=subject_code,
+            division=division,
+            batch=batch,
+        ))
 
     exam_label = next(
         (e['label'] for e in EXAM_TYPES if e['value'] == exam_type),
@@ -244,6 +359,9 @@ def download_ct1_template():
         'max_marks':       max_marks,
         'academic_year':   academic_year,
         'semester_id':     semester_id,
+        'division':        division,
+        'batch':           batch,
+        'batch_label':     batch_label(division, batch),
     }
 
     buf, filename = generate_ct1_template(meta, enrolled)
@@ -255,25 +373,14 @@ def download_ct1_template():
     )
 
 @app.route('/upload-ct1', methods=['POST'])
+@login_required
 def upload_ct1():
     from excel_utils import parse_ct1_upload
 
     subject_code  = request.form.get('subject_code', '').strip()
-    exam_type     = request.form.get('exam_type', 'CT1').strip().upper()
+    exam_type     = clean_exam_type(request.form.get('exam_type', 'CT1'), VALID_EXAM_TYPES)
     semester_id   = request.form.get('semester_id', type=int)
-    academic_map = {
-        3: '2024-25',
-        4: '2024-25',
-        5: '2025-26',
-        6: '2025-26',
-        7: '2026-27',
-        8: '2026-27'
-    }
-
-    academic_year = academic_map.get(
-        semester_id,
-        '2024-25'
-    )
+    academic_year = _academic_year_for_semester(semester_id)
     max_marks     = EXAM_MAX_MARKS.get(exam_type, 10)
 
     if not subject_code:
@@ -344,26 +451,16 @@ def upload_ct1():
     ))
 
 @app.route('/download-ct1-report/<fmt>')
+@login_required
 def download_ct1_report(fmt):
     subject_code    = request.args.get('subject_code', '').strip()
     subject_teacher = request.args.get('subject_teacher', '').strip()
     exam_date       = request.args.get('exam_date', '').strip()
-    exam_type       = request.args.get('exam_type', 'CT1').strip().upper()
+    exam_type       = clean_exam_type(request.args.get('exam_type', 'CT1'), VALID_EXAM_TYPES)
     semester_id     = request.args.get('semester_id', type=int)
-
-    academic_map = {
-        3: '2024-25',
-        4: '2024-25',
-        5: '2025-26',
-        6: '2025-26',
-        7: '2026-27',
-        8: '2026-27'
-    }
-
-    academic_year = academic_map.get(
-        semester_id,
-        '2024-25'
-    )
+    division        = clean_filter(request.args.get('division', ''))
+    batch           = clean_filter(request.args.get('batch', ''))
+    academic_year = _academic_year_for_semester(semester_id)
 
     if not subject_code:
         flash('Please select a subject.', 'error')
@@ -379,18 +476,8 @@ def download_ct1_report(fmt):
         exam_type
     )
 
-    # Column map
-    col_map = {
-        'CT1': TheoryMarks.ct1,
-        'CT2': TheoryMarks.ct2,
-        'ASSIGNMENT': TheoryMarks.assignment,
-        'MIDSEM': TheoryMarks.midsem,
-    }
-
-    marks_col = col_map.get(exam_type, TheoryMarks.ct1)
-
-    # Fetch ALL enrolled students
-    enrolled_students = (
+    # Fetch enrolled students, optionally filtered by division/batch
+    enrolled_query = (
         db.session.query(Student)
         .join(Enrollment, Enrollment.prn == Student.prn)
         .filter(
@@ -398,17 +485,19 @@ def download_ct1_report(fmt):
             Enrollment.semester_id == semester_id,
             Enrollment.academic_year == academic_year
         )
-        .order_by(Student.prn)
-        .all()
     )
+    enrolled_query = apply_student_batch_filters(enrolled_query, Student, division, batch)
+    enrolled_students = enrolled_query.order_by(Student.prn).all()
 
     if not enrolled_students:
-        flash('No students enrolled in this subject.', 'error')
+        flash('No students found for this subject and selected division/batch filter.', 'error')
         return redirect(url_for(
             'ct1_page',
             semester_id=semester_id,
             exam_type=exam_type,
-            subject_code=subject_code
+            subject_code=subject_code,
+            division=division,
+            batch=batch,
         ))
 
     # Get uploaded marks
@@ -432,6 +521,9 @@ def download_ct1_report(fmt):
         'max_marks': EXAM_MAX_MARKS.get(exam_type, 10),
         'academic_year': academic_year,
         'semester_id': semester_id,
+        'division': division,
+        'batch': batch,
+        'batch_label': batch_label(division, batch),
     }
 
     data = []
@@ -490,6 +582,7 @@ def _is_marks_locked(subject_code, academic_year, exam_type):
 # ══════════════════════════════════════════════════════════════
 
 @app.route('/download-ct1-summary-excel')
+@login_required
 def download_ct1_summary_excel():
     from summary_utils import build_summary_data
     from excel_utils   import generate_ct1_summary_excel
@@ -499,14 +592,9 @@ def download_ct1_summary_excel():
         flash('Please select a semester.', 'error')
         return redirect(url_for('index'))
 
-    academic_map = {
-        3: '2024-25', 4: '2024-25',
-        5: '2025-26', 6: '2025-26',
-        7: '2026-27', 8: '2026-27',
-    }
-    academic_year = academic_map.get(semester_id, '2024-25')
+    academic_year = _academic_year_for_semester(semester_id)
 
-    exam_type   = request.args.get('exam_type',       'CT1').strip().upper()
+    exam_type   = clean_exam_type(request.args.get('exam_type', 'CT1'), VALID_EXAM_TYPES)
     date_from   = request.args.get('date_from',       '').strip()
     date_to     = request.args.get('date_to',         '').strip()
     coordinator = request.args.get('coordinator',     '').strip()
@@ -530,8 +618,7 @@ def download_ct1_summary_excel():
 
     if not summary_data['subjects']:
         flash(
-            'No subjects found for the selected semester. '
-            'Check SEMESTER_SUBJECTS in summary_utils.py.',
+            'No visible theory subjects found for the selected semester.',
             'error'
         )
         return redirect(request.referrer or '/')
@@ -549,6 +636,7 @@ def download_ct1_summary_excel():
 
 
 @app.route('/download-ct1-summary-pdf')
+@login_required
 def download_ct1_summary_pdf():
     from summary_utils import build_summary_data
     from pdf_utils     import generate_ct1_summary_pdf
@@ -558,14 +646,9 @@ def download_ct1_summary_pdf():
         flash('Please select a semester.', 'error')
         return redirect(request.referrer or '/')
 
-    academic_map = {
-        3: '2024-25', 4: '2024-25',
-        5: '2025-26', 6: '2025-26',
-        7: '2026-27', 8: '2026-27',
-    }
-    academic_year = academic_map.get(semester_id, '2024-25')
+    academic_year = _academic_year_for_semester(semester_id)
 
-    exam_type   = request.args.get('exam_type',   'CT1').strip().upper()
+    exam_type   = clean_exam_type(request.args.get('exam_type', 'CT1'), VALID_EXAM_TYPES)
     date_from   = request.args.get('date_from',   '').strip()
     date_to     = request.args.get('date_to',     '').strip()
     coordinator = request.args.get('coordinator', '').strip()
@@ -589,8 +672,7 @@ def download_ct1_summary_pdf():
 
     if not summary_data['subjects']:
         flash(
-            'No subjects found for the selected semester. '
-            'Check SEMESTER_SUBJECTS in summary_utils.py.',
+            'No visible theory subjects found for the selected semester.',
             'error'
         )
         return redirect(request.referrer or '/')
@@ -604,6 +686,7 @@ def download_ct1_summary_pdf():
     )
 
 @app.route('/download-internal-report/<fmt>')
+@login_required
 def download_internal_report(fmt):
 
     from report_utils import build_internal_data
@@ -614,20 +697,7 @@ def download_internal_report(fmt):
     if not subject_code:
         flash('Please select subject.', 'error')
         return redirect(url_for('ct1_page'))
-
-    academic_map = {
-        3: '2024-25',
-        4: '2024-25',
-        5: '2025-26',
-        6: '2025-26',
-        7: '2026-27',
-        8: '2026-27'
-    }
-
-    academic_year = academic_map.get(
-        semester_id,
-        '2024-25'
-    )
+    academic_year = _academic_year_for_semester(semester_id)
 
     data, meta = build_internal_data(
         subject_code,

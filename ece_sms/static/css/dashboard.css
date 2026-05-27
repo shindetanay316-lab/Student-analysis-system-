@@ -1049,6 +1049,13 @@ body {
   color: var(--teal);
 }
 
+
+.alert-warning {
+  background: var(--warning-bg);
+  border-color: var(--warning);
+  color: #78350F;
+}
+
 /* ════════════════════════════════════════════════════════════
    STATUS BAR (Summary form)
 ════════════════════════════════════════════════════════════ */

@@ -1,42 +1,30 @@
-from models import db, Student, Subject, TheoryMarks, Enrollment
+from sqlalchemy import or_
 
-# ── Subject lists per semester ────────────────────────────────
-SEMESTER_SUBJECTS = {
-    6: [
-        "BTECPC601",
-        "BTECPC602",
-        "BTECPE603",
-        "BTECOE604",
-        "BTECHM605",
-    ],
-    4: [],
-}
+from models import db, Subject, TheoryMarks, Enrollment
 
-# ── Faculty map ───────────────────────────────────────────────
+
+# ── Optional faculty overrides ───────────────────────────────
+# These are NOT used as the subject source anymore.
+# Subjects now come from the subjects table dynamically.
 FACULTY_MAP = {
     "BTECPC601": {
         "abbr":    "IoT",
-        "name":    "Internet of Things",
         "faculty": "Prof. J.N. Mohite",
     },
     "BTECPC602": {
         "abbr":    "AIML",
-        "name":    "Artificial Intelligence & Machine Learning",
         "faculty": "Dr. P.G. Thombare",
     },
     "BTECPE603": {
         "abbr":    "PEC-3",
-        "name":    "Professional Elective Course – 3",
         "faculty": "Prof. A.V. Khake",
     },
     "BTECOE604": {
         "abbr":    "OEC-2",
-        "name":    "Open Elective Course – 2",
         "faculty": "Prof. S.B. Dhumal",
     },
     "BTECHM605": {
         "abbr":    "HSSMEC",
-        "name":    "Humanities & Social Sciences",
         "faculty": "Prof. B.R. Pawar",
     },
 }
@@ -59,6 +47,8 @@ EXAM_COLUMN_MAP = {
 
 # ── Class label per semester ──────────────────────────────────
 SEMESTER_CLASS_LABEL = {
+    1: "First Year",
+    2: "First Year",
     3: "Second Year",
     4: "Second Year",
     5: "Third Year",
@@ -76,6 +66,50 @@ EXAM_DISPLAY_LABEL = {
 }
 
 
+def _visible_summary_subjects(semester_id):
+    """Fetch summary subjects from database, not from a hardcoded list.
+
+    Rules:
+    - THEORY subjects only
+    - audit subjects excluded
+    - compulsory subjects included
+    - real elective options included
+    - generic elective parent rows hidden
+    """
+    return (
+        Subject.query
+        .filter(Subject.semester_id == semester_id)
+        .filter(Subject.subject_type == "THEORY")
+        .filter(Subject.is_audit == False)
+        .filter(
+            or_(
+                Subject.is_elective == False,
+                Subject.parent_subject_code.isnot(None),
+            )
+        )
+        .order_by(Subject.subject_code)
+        .all()
+    )
+
+
+def _subject_abbr(subject):
+    """Create a readable abbreviation when no faculty override exists."""
+    if subject.elective_group:
+        return subject.elective_group
+    if subject.category:
+        return subject.category
+    return subject.subject_code
+
+
+def _faculty_info(subject):
+    override = FACULTY_MAP.get(subject.subject_code, {})
+    return {
+        "abbr": override.get("abbr") or _subject_abbr(subject),
+        "name": subject.subject_name,
+        "faculty": override.get("faculty") or "N/A",
+    }
+
+
 def build_summary_data(
     semester_id,
     exam_type    = "CT1",
@@ -87,23 +121,23 @@ def build_summary_data(
     principal    = "",
 ):
     """
-    Queries existing theory_marks + enrollment tables.
-    Returns a structured dictionary ready for both Excel and PDF generators.
-    No new DB tables used.
+    Queries existing subjects + theory_marks + enrollment tables.
+
+    Dynamic cleanup:
+    - No SEMESTER_SUBJECTS hardcoded list.
+    - Subject list comes from the subjects table.
+    - Audit subjects and generic elective parent rows are hidden.
     """
-    exam_type     = exam_type.upper()
-    subject_codes = SEMESTER_SUBJECTS.get(semester_id, [])
-    column_name   = EXAM_COLUMN_MAP.get(exam_type, "ct1")
-    pass_mark     = PASS_THRESHOLD.get(exam_type, 4)
+    exam_type   = exam_type.upper()
+    subjects    = _visible_summary_subjects(semester_id)
+    column_name = EXAM_COLUMN_MAP.get(exam_type, "ct1")
+    pass_mark   = PASS_THRESHOLD.get(exam_type, 4)
 
     subject_stats = []
 
-    for code in subject_codes:
-        fm = FACULTY_MAP.get(code, {
-            "abbr":    code,
-            "name":    code,
-            "faculty": "N/A",
-        })
+    for subj in subjects:
+        code = subj.subject_code
+        fm = _faculty_info(subj)
 
         # Total enrolled for this subject + semester
         enrolled_count = (
@@ -147,9 +181,7 @@ def build_summary_data(
             .all()
         ]
 
-        absent  = 0
-        passed  = 0
-        failed  = 0
+        absent = passed = failed = 0
 
         for prn in enrolled_prns:
             mark = marks_lookup.get(prn, None)
@@ -162,10 +194,7 @@ def build_summary_data(
 
         appeared   = passed + failed
         total      = enrolled_count if enrolled_count > 0 else len(enrolled_prns)
-        result_pct = (
-            round((passed / appeared) * 100)
-            if appeared > 0 else 0
-        )
+        result_pct = round((passed / appeared) * 100) if appeared > 0 else 0
 
         subject_stats.append({
             "subject_code": code,
@@ -182,9 +211,7 @@ def build_summary_data(
 
     # Average class result across all subjects
     pcts = [s["result_pct"] for s in subject_stats if s["appeared"] > 0]
-    average_class_result = (
-        round(sum(pcts) / len(pcts)) if pcts else 0
-    )
+    average_class_result = round(sum(pcts) / len(pcts)) if pcts else 0
 
     # Faculty table rows (ordered same as subject_stats)
     faculty_table = [
@@ -220,7 +247,7 @@ def build_summary_data(
         },
         "class_summary": {
             "class_name":           class_label,
-            "division":             "A",
+            "division":             "All",
             "average_class_result": average_class_result,
         },
         "subjects":      subject_stats,

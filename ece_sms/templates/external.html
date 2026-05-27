@@ -62,7 +62,8 @@
                             <select name="semester_id" class="form-control" required onchange="this.form.submit()">
                                 <option value="">-- Select Semester --</option>
                                 {% for sem in semesters %}
-                                <option value="{{ sem.semester_id }}" {% if sem.semester_id == selected_sem_id %}selected{% endif %}>
+                                <option value="{{ sem.semester_id }}" {% if sem.semester_id==selected_sem_id
+                                    %}selected{% endif %}>
                                     Semester {{ sem.semester_id }}
                                     ({{ sem.academic_year }})
                                 </option>
@@ -76,12 +77,36 @@
                             <select name="subject_code" class="form-control" required onchange="this.form.submit()">
                                 <option value="">-- Select Subject --</option>
                                 {% for subj in subjects %}
-                                <option value="{{ subj.subject_code }}" {% if subj.subject_code == selected_subject_code %}selected{% endif %}>
+                                <option value="{{ subj.subject_code }}" {% if subj.subject_code==selected_subject_code
+                                    %}selected{% endif %}>
                                     {{ subj.subject_code }} &mdash; {{ subj.subject_name }}
                                 </option>
                                 {% endfor %}
                             </select>
                             <input type="hidden" name="academic_year" value="{{ academic_year }}">
+                    <input type="hidden" name="division" value="{{ selected_division }}">
+                    <input type="hidden" name="batch" value="{{ selected_batch }}">
+                        </div>
+                        {% endif %}
+
+                        {% if selected_sem_id %}
+                        <div class="form-group">
+                            <label class="form-label">Division Filter</label>
+                            <select name="division" class="form-control" onchange="this.form.submit()">
+                                <option value="">All Divisions</option>
+                                {% for div in division_options %}
+                                <option value="{{ div }}" {% if selected_division == div %}selected{% endif %}>Division {{ div }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Batch Filter</label>
+                            <select name="batch" class="form-control" onchange="this.form.submit()">
+                                <option value="">All Batches</option>
+                                {% for b in batch_options %}
+                                <option value="{{ b }}" {% if selected_batch == b %}selected{% endif %}>Batch {{ b }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
                         {% endif %}
 
@@ -112,7 +137,8 @@
             </div>
             <div class="card-body">
                 <!-- Part A: Download Template -->
-                <h3 style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: var(--text-1);">Part A — Download Blank Template</h3>
+                <h3 style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: var(--text-1);">Part A —
+                    Download Blank Template</h3>
                 <p class="card-desc" style="margin-bottom: 12px;">
                     Download the official external marks entry template pre-filled with
                     enrolled student details. Enter marks in the designated column.
@@ -127,9 +153,13 @@
                     <span class="info-chip">
                         Enrolled Students: {{ total_students }}
                     </span>
+                    <span class="info-chip">
+                        Filter: {{ batch_label }}
+                    </span>
                 </div>
                 <div class="btn-row" style="margin-bottom: 24px;">
-                    <a href="/download-external-template?subject_code={{ selected_subject_code }}&semester_id={{ selected_sem_id }}&academic_year={{ academic_year }}" class="btn btn-secondary">
+                    <a href="/download-external-template?subject_code={{ selected_subject_code }}&semester_id={{ selected_sem_id }}&academic_year={{ academic_year }}&division={{ selected_division }}&batch={{ selected_batch }}"
+                        class="btn btn-secondary">
                         Download Blank Template
                     </a>
                 </div>
@@ -137,7 +167,8 @@
                 <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
 
                 <!-- Part B: Upload File -->
-                <h3 style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: var(--text-1);">Part B — Upload Completed Marks File</h3>
+                <h3 style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: var(--text-1);">Part B —
+                    Upload Completed Marks File</h3>
                 <p class="card-desc" style="margin-bottom: 12px;">
                     Upload the completed Excel file. All entries will be validated
                     before saving.
@@ -149,7 +180,8 @@
 
                     <div class="form-group" style="margin-bottom:16px;">
                         <label class="form-label">Select Completed Excel File (.xlsx)</label>
-                        <div class="file-drop-zone" id="dropZone" onclick="document.getElementById('externalFile').click()">
+                        <div class="file-drop-zone" id="dropZone"
+                            onclick="document.getElementById('externalFile').click()">
                             <div class="file-drop-text" id="fileDropText">
                                 Click to select file or drag and drop here
                             </div>
@@ -159,7 +191,8 @@
                     </div>
 
                     <div class="btn-row">
-                        <button type="submit" class="btn btn-primary" onclick="return confirm('Confirm submission of ESE marks?');">
+                        <button type="submit" class="btn btn-primary"
+                            onclick="return confirm('Confirm submission of ESE marks?');">
                             Submit External Marks
                         </button>
                     </div>
@@ -178,11 +211,11 @@
                     Download the official ESE report in Excel or PDF format.
                 </p>
                 <div class="btn-row">
-                    <a href="/download-external-report/excel?subject_code={{ selected_subject_code }}&semester_id={{ selected_sem_id }}&academic_year={{ academic_year }}"
+                    <a href="/download-external-report/excel?subject_code={{ selected_subject_code }}&semester_id={{ selected_sem_id }}&academic_year={{ academic_year }}&division={{ selected_division }}&batch={{ selected_batch }}"
                         class="btn btn-report-excel">
                         Download External Report Excel
                     </a>
-                    <a href="/download-external-report/pdf?subject_code={{ selected_subject_code }}&semester_id={{ selected_sem_id }}&academic_year={{ academic_year }}"
+                    <a href="/download-external-report/pdf?subject_code={{ selected_subject_code }}&semester_id={{ selected_sem_id }}&academic_year={{ academic_year }}&division={{ selected_division }}&batch={{ selected_batch }}"
                         class="btn btn-report-pdf">
                         Download External Report PDF
                     </a>
