@@ -1,5 +1,5 @@
 from models import db, Student, Subject, TheoryMarks, Enrollment, ExternalMarks
-from calculations import compute_final_result
+from calculations import compute_final_result, is_theory_internal_complete, update_internal_totals
 from batch_utils import clean_filter, apply_student_batch_filters, batch_label
 
 
@@ -60,7 +60,11 @@ def build_external_data(subject_code, semester_id, academic_year, division="", b
         tm = tm_lookup.get(stu.prn)
         ext = ext_lookup.get(stu.prn)
 
-        internal_val = _safe_float(tm.internal_total) if tm else None
+        internal_val = None
+        if tm:
+            update_internal_totals(tm)
+            if is_theory_internal_complete(tm) and tm.internal_total is not None:
+                internal_val = _safe_float(tm.internal_total)
 
         external_val = None
         if tm and tm.external is not None:

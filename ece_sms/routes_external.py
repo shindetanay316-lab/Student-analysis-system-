@@ -75,31 +75,46 @@ def _academic_year_for_semester(semester_id=None, fallback="2024-25"):
 
 
 def _get_subject_students(subject_code, semester_id, academic_year, division="", batch=""):
-    """Return list of enrolled students with their current external marks."""
-    query = (
-        models.Enrollment.query
-        .filter_by(subject_code=subject_code, semester_id=semester_id,
-                   academic_year=academic_year)
-        .join(models.Student, models.Enrollment.prn == models.Student.prn)
+    """Return enrolled students with current external marks using bulk lookups.
+
+    This avoids one Student + TheoryMarks + ExternalMarks query per student.
+    """
+    student_query = (
+        db.session.query(models.Student)
+        .join(models.Enrollment, models.Enrollment.prn == models.Student.prn)
+        .filter(
+            models.Enrollment.subject_code == subject_code,
+            models.Enrollment.semester_id == semester_id,
+            models.Enrollment.academic_year == academic_year,
+        )
     )
-    query = apply_student_batch_filters(query, models.Student, division, batch)
-    enrollments = query.order_by(models.Student.prn).all()
+    student_query = apply_student_batch_filters(student_query, models.Student, division, batch)
+    students = student_query.order_by(models.Student.prn).all()
+
+    prns = [s.prn for s in students]
+    if not prns:
+        return []
+
+    tm_rows = models.TheoryMarks.query.filter(
+        models.TheoryMarks.prn.in_(prns),
+        models.TheoryMarks.subject_code == subject_code,
+        models.TheoryMarks.semester_id == semester_id,
+        models.TheoryMarks.academic_year == academic_year,
+    ).all()
+    ext_rows = models.ExternalMarks.query.filter(
+        models.ExternalMarks.prn.in_(prns),
+        models.ExternalMarks.subject_code == subject_code,
+        models.ExternalMarks.semester_id == semester_id,
+        models.ExternalMarks.academic_year == academic_year,
+    ).all()
+
+    tm_lookup = {r.prn: r for r in tm_rows}
+    ext_lookup = {r.prn: r for r in ext_rows}
 
     rows = []
-    for enr in enrollments:
-        student = models.Student.query.get(enr.prn)
-        tm_row = models.TheoryMarks.query.filter_by(
-            prn=enr.prn,
-            subject_code=subject_code,
-            semester_id=semester_id,
-            academic_year=academic_year,
-        ).first()
-        ext_row = models.ExternalMarks.query.filter_by(
-            prn=enr.prn,
-            subject_code=subject_code,
-            semester_id=semester_id,
-            academic_year=academic_year,
-        ).first()
+    for student in students:
+        tm_row = tm_lookup.get(student.prn)
+        ext_row = ext_lookup.get(student.prn)
 
         ext_val = None
         if tm_row and tm_row.external is not None:
@@ -108,11 +123,11 @@ def _get_subject_students(subject_code, semester_id, academic_year, division="",
             ext_val = float(ext_row.external_marks)
 
         rows.append({
-            "student_id":    enr.prn,
-            "prn":           enr.prn,
-            "name":          student.name if student else "",
+            "student_id": student.prn,
+            "prn": student.prn,
+            "name": student.name,
             "external_marks": ext_val,
-            "locked":        ext_row.locked if ext_row else False,
+            "locked": ext_row.locked if ext_row else False,
         })
     return rows
 
@@ -237,6 +252,7 @@ def save_external_marks():
         row = models.ExternalMarks.query.filter_by(
             prn=student_id,
             subject_code=subject_code,
+            semester_id=semester_id,
             academic_year=academic_year,
         ).first()
 
@@ -349,7 +365,8 @@ def upload_external():
         error_msgs = [f"Row {e['row']}: {e['col']} — {e['msg']}" for e in result_data]
         flash('Upload failed. Errors:<br>' + '<br>'.join(error_msgs), 'error')
         return redirect(url_for("external.external_marks_page",
-                                semester_id=semester_id, subject_code=subject_code))
+                                semester_id=semester_id, subject_code=subject_code,
+                                academic_year=academic_year))
 
     errors  = []
     saved   = 0
@@ -374,6 +391,7 @@ def upload_external():
         ext_row = models.ExternalMarks.query.filter_by(
             prn=student.prn,
             subject_code=subject_code,
+            semester_id=semester_id,
             academic_year=academic_year,
         ).first()
 
@@ -388,18 +406,14 @@ def upload_external():
             academic_year=academic_year
         ).first()
 
-        if existing is None:
-            existing = models.TheoryMarks(
-                prn=student.prn,
-                subject_code=subject_code,
-                semester_id=semester_id,
-                academic_year=academic_year
-            )
-            db.session.add(existing)
-
-        existing.external = float(ext_val)
-        from final_result_utils import recalculate_theory_result
-        recalculate_theory_result(existing)
+        # Phase C cleanup:
+        # External upload should not create empty TheoryMarks rows when internal
+        # marks have not been uploaded yet. Keep the official external value in
+        # ExternalMarks. If a TheoryMarks row already exists, sync/recalculate it.
+        if existing is not None:
+            existing.external = float(ext_val)
+            from final_result_utils import recalculate_theory_result
+            recalculate_theory_result(existing)
 
         # Ensure ExternalMarks table is also updated to keep lock status and dashboard stats working
         if ext_row is None:
@@ -438,7 +452,8 @@ def upload_external():
     flash_sgpa_warnings(flash, sgpa_warnings)
 
     return redirect(url_for("external.external_marks_page",
-                            semester_id=semester_id, subject_code=subject_code))
+                            semester_id=semester_id, subject_code=subject_code,
+                            academic_year=academic_year))
 
 
 # ── ROUTE: /download-external-template ───────────────────────────────────────

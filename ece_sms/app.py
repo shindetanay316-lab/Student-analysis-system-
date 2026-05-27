@@ -11,6 +11,7 @@ from academic_utils import (
     get_academic_year_for_semester,
     visible_theory_subjects_query,
     visible_lab_subjects_query,
+    attendance_subjects_query,
 )
 from stability_utils import clean_exam_type
 
@@ -49,6 +50,12 @@ def create_app():
 
     from routes_batches import batches_bp
     app.register_blueprint(batches_bp)
+
+    from routes_subjects import subjects_bp
+    app.register_blueprint(subjects_bp)
+
+    from routes_attendance import attendance_bp
+    app.register_blueprint(attendance_bp)
 
     return app
 
@@ -139,6 +146,7 @@ def index():
     student_count = Student.query.count()
     subject_count = Subject.query.filter(
         Subject.is_audit == False,
+        Subject.is_active == True,
         Subject.subject_type.in_(['THEORY', 'LAB'])
     ).count()
 
@@ -165,8 +173,10 @@ def index():
                 locked_count += 1
 
     lab_subjects = []
+    attendance_count = 0
     if active_sem:
         lab_subjects = visible_lab_subjects_query(active_sem.semester_id).all()
+        attendance_count = attendance_subjects_query(active_sem.semester_id).count()
 
     all_semesters = Semester.query.order_by(Semester.semester_id).all()
 
@@ -180,6 +190,7 @@ def index():
         theory_subjects = theory_subjects,
         lab_subjects    = lab_subjects,
         lab_count       = len(lab_subjects),
+        attendance_count = attendance_count,
         ct1_lock        = ct1_lock,
         locked_count    = locked_count,
     )
@@ -232,6 +243,38 @@ def api_lab_subjects():
         ]
     })
 
+
+@app.route('/set-active-semester', methods=['POST'])
+@login_required
+def set_active_semester():
+    """Admin helper to set exactly one active semester from dashboard."""
+    if getattr(current_user, 'role', None) != 'ADMIN':
+        flash('Only admin can change the active semester.', 'error')
+        return redirect(url_for('index'))
+
+    semester_id = request.form.get('semester_id', type=int)
+    academic_year = request.form.get('academic_year', '').strip()
+
+    if not semester_id or not academic_year:
+        flash('Please select a valid semester.', 'error')
+        return redirect(url_for('index'))
+
+    sem = Semester.query.filter_by(
+        semester_id=semester_id,
+        academic_year=academic_year
+    ).first()
+    if not sem:
+        flash('Selected semester row was not found.', 'error')
+        return redirect(url_for('index'))
+
+    Semester.query.update({Semester.is_active: False})
+    sem.is_active = True
+    db.session.commit()
+
+    flash(f'Active semester changed to Semester {semester_id} ({academic_year}).', 'success')
+    return redirect(url_for('index'))
+
+
 @app.route('/ct1')
 @login_required
 def ct1_page():
@@ -277,7 +320,7 @@ def ct1_page():
         for subj in subjects:
             key = subj.subject_code + '_' + selected_exam
             lock_status[key] = _is_marks_locked(
-                subj.subject_code, academic_year, selected_exam
+                subj.subject_code, academic_year, selected_exam, selected_semester
             )
 
     return render_template(
@@ -387,7 +430,7 @@ def upload_ct1():
         flash('Subject code missing.', 'error')
         return redirect(url_for('ct1_page'))
 
-    if _is_marks_locked(subject_code, academic_year, exam_type):
+    if _is_marks_locked(subject_code, academic_year, exam_type, semester_id):
         flash(
             'Marks have been successfully submitted and locked. '
             'Further modifications are restricted to preserve academic record integrity.',
@@ -503,6 +546,7 @@ def download_ct1_report(fmt):
     # Get uploaded marks
     marks_rows = TheoryMarks.query.filter_by(
         subject_code=subject_code,
+        semester_id=semester_id,
         academic_year=academic_year
     ).all()
 
@@ -562,7 +606,7 @@ def download_ct1_report(fmt):
         mimetype=mimetype
     )
 
-def _is_marks_locked(subject_code, academic_year, exam_type):
+def _is_marks_locked(subject_code, academic_year, exam_type, semester_id=None):
     col_map = {
         'CT1':        TheoryMarks.ct1,
         'CT2':        TheoryMarks.ct2,
@@ -570,12 +614,15 @@ def _is_marks_locked(subject_code, academic_year, exam_type):
         'MIDSEM':     TheoryMarks.midsem,
     }
     col = col_map.get(exam_type.upper(), TheoryMarks.ct1)
-    exists = TheoryMarks.query.filter(
+    query = TheoryMarks.query.filter(
         TheoryMarks.subject_code  == subject_code,
         TheoryMarks.academic_year == academic_year,
         col.isnot(None)
-    ).first()
-    return exists is not None
+    )
+    if semester_id is not None:
+        query = query.filter(TheoryMarks.semester_id == semester_id)
+
+    return query.first() is not None
 # ══════════════════════════════════════════════════════════════
 #  DEPARTMENT SUMMARY ROUTES
 #  Append before:  if __name__ == '__main__':

@@ -4,6 +4,9 @@ Run this after replacing calculations.py to repair already-created sgpa_cgpa row
 
 Usage:
     python recalculate_all_sgpa_cgpa.py
+
+This version recalculates all rows in one transaction. If any row fails,
+no partial SGPA/CGPA update is committed.
 """
 
 from app import app
@@ -25,28 +28,25 @@ with app.app_context():
     )
 
     total = len(pairs)
-    ok = 0
     failed = []
 
-    for prn, semester_id, academic_year in pairs:
-        try:
+    try:
+        for prn, semester_id, academic_year in pairs:
             update_sgpa_cgpa_for_student(
                 prn=prn,
                 semester_id=semester_id,
                 academic_year=academic_year,
                 db=db,
                 models=models,
+                commit=False,
             )
-            ok += 1
-        except Exception as exc:
-            db.session.rollback()
-            failed.append((prn, semester_id, academic_year, str(exc)))
 
-    print(f"SGPA/CGPA refresh complete: {ok}/{total} semester-student rows processed.")
+        db.session.commit()
+        print(f"SGPA/CGPA refresh complete: {total}/{total} semester-student rows processed.")
 
-    if failed:
-        print("\nFailed rows:")
-        for prn, semester_id, academic_year, error in failed[:50]:
-            print(f"- {prn}, Sem {semester_id}, {academic_year}: {error}")
-        if len(failed) > 50:
-            print(f"... and {len(failed) - 50} more failures")
+    except Exception as exc:
+        db.session.rollback()
+        failed.append((prn, semester_id, academic_year, str(exc)))
+
+        print("SGPA/CGPA refresh failed. No partial updates were committed.")
+        print(f"Failed at: {prn}, Sem {semester_id}, {academic_year}: {exc}")

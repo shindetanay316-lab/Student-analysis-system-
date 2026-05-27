@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECE SMS — Attendance</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body>
+<div class="main-wrap" style="margin-left:0;min-height:100vh;">
+    <header class="topbar" style="left:0;">
+        <div class="topbar-left">
+            <a href="/" class="btn btn-outline btn-sm">&larr; Dashboard</a>
+            <nav class="topbar-breadcrumb"><span>ECE SMS</span> &#8250; <strong>Attendance</strong></nav>
+        </div>
+        <div class="topbar-right">
+            <span class="topbar-ay">{{ academic_year }}</span>
+            <div class="topbar-semester-pill"><div class="topbar-dot"></div>Semester {{ selected_semester or '—' }}</div>
+        </div>
+    </header>
+
+    <main class="content" style="padding-top:82px;">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for cat, msg in messages %}<div class="alert alert-{{ cat }}">{{ msg|safe }}</div>{% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <section class="page-section active">
+            <div class="section-head">
+                <h1 class="section-title">Smart <span>Attendance System</span></h1>
+                <p class="section-sub">Upload a college-style weekly timetable once, then generate date-wise attendance templates automatically.</p>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card gold"><div class="stat-icon">&#128197;</div><div class="stat-value">{{ stats.slots }}</div><div class="stat-label">Weekly Slots</div><div class="stat-sub">Stored for selected semester</div></div>
+                <div class="stat-card teal"><div class="stat-icon">&#128218;</div><div class="stat-value">{{ stats.subjects }}</div><div class="stat-label">Attendance Subjects</div><div class="stat-sub">Includes attendance-only</div></div>
+                <div class="stat-card forest"><div class="stat-icon">&#9989;</div><div class="stat-value">{{ stats.records }}</div><div class="stat-label">Summary Rows</div><div class="stat-sub">Uploaded for selected subject</div></div>
+                <div class="stat-card crimson"><div class="stat-icon">&#9888;</div><div class="stat-value">{{ stats.defaulters }}</div><div class="stat-label">Below 75%</div><div class="stat-sub">Selected subject</div></div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-header-icon gold">&#128197;</div>
+                    <div><div class="panel-title">Step 1 — Weekly Timetable Upload</div><div class="panel-sub">Admin uploads an Excel timetable that looks like the normal class timetable. Teachers only edit subject cells.</div></div>
+                    <a class="panel-badge" href="/attendance/download-timetable-template">Download Template</a>
+                </div>
+                <div class="panel-body">
+                    {% if current_user.role == 'ADMIN' %}
+                    <form method="POST" action="/attendance/upload-timetable" enctype="multipart/form-data" class="form-grid form-grid-2" style="align-items:end;">
+                        <div class="form-group">
+                            <label class="form-label">Upload Filled Timetable Excel</label>
+                            <input type="file" name="timetable_file" accept=".xlsx" class="form-control" required>
+                            <small style="color:var(--text-3);">Template is day/time-slot based like the college timetable. Use exact subject codes inside cells; use B1:/B2: for batch labs.</small>
+                        </div>
+                        <div class="form-group"><button class="btn btn-gold btn-lg" type="submit">Upload Timetable</button></div>
+                    </form>
+                    {% else %}
+                    <p style="font-size:13px;color:var(--text-2);">Only admin can upload timetable. Teachers can generate and upload attendance sheets after timetable is available.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-header-icon teal">&#128221;</div>
+                    <div><div class="panel-title">Step 2 — Generate Attendance Template</div><div class="panel-sub">Select subject and semester date range. System creates columns only for actual lecture dates.</div></div>
+                </div>
+                <div class="panel-body">
+                    <form method="GET" action="/attendance/download-template" class="form-grid form-grid-3" style="align-items:end;">
+                        <div class="form-group">
+                            <label class="form-label">Semester</label>
+                            <select class="form-control" name="semester_id" id="semesterSelect" onchange="reloadPageWithSemester()" required>
+                                <option value="">-- Select Semester --</option>
+                                {% for sem in all_semesters %}
+                                <option value="{{ sem.semester_id }}" {% if selected_semester == sem.semester_id %}selected{% endif %}>Semester {{ sem.semester_id }} ({{ sem.academic_year }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Subject / Activity</label>
+                            <select class="form-control" name="subject_code" required>
+                                <option value="">-- Select Subject --</option>
+                                {% for s in subjects %}
+                                <option value="{{ s.subject_code }}" {% if selected_subject == s.subject_code %}selected{% endif %}>{{ s.subject_code }} — {{ s.subject_name }}{% if s.is_attendance_only %} [Attendance Only]{% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Division</label>
+                            <select class="form-control" name="division">
+                                <option value="">ALL</option>
+                                {% for d in division_options %}<option value="{{ d }}" {% if selected_division == d %}selected{% endif %}>{{ d }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Batch</label>
+                            <select class="form-control" name="batch">
+                                <option value="">ALL</option>
+                                {% for b in batch_options %}<option value="{{ b }}" {% if selected_batch == b %}selected{% endif %}>{{ b }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group"><label class="form-label">Start Date</label><input type="date" name="start_date" class="form-control" required></div>
+                        <div class="form-group"><label class="form-label">End Date</label><input type="date" name="end_date" class="form-control" required></div>
+                        <div class="form-group"><button class="btn btn-forest btn-lg" type="submit">Download Attendance Template</button></div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-header-icon forest">&#8682;</div>
+                    <div><div class="panel-title">Step 3 — Upload Filled Attendance</div><div class="panel-sub">Fill P/A/L in generated Excel and upload it here. Summary percentage is calculated automatically.</div></div>
+                </div>
+                <div class="panel-body">
+                    <form method="POST" action="/attendance/upload" enctype="multipart/form-data" class="form-grid form-grid-2" style="align-items:end;">
+                        <div class="form-group">
+                            <label class="form-label">Filled Attendance Excel</label>
+                            <input type="file" name="attendance_file" accept=".xlsx" class="form-control" required>
+                            <small style="color:var(--text-3);">Allowed values: P = Present, A = Absent, L/OD/Medical = stored but not counted in total.</small>
+                        </div>
+                        <div class="form-group"><button class="btn btn-teal btn-lg" type="submit">Upload Attendance</button></div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-header-icon crimson">&#9888;</div>
+                    <div><div class="panel-title">Attendance Summary & Defaulters</div><div class="panel-sub">Filter page by semester and subject to view uploaded summary rows.</div></div>
+                    {% if selected_subject %}
+                    <span style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <a class="btn btn-outline btn-sm" href="/attendance/defaulters/excel?semester_id={{ selected_semester }}&subject_code={{ selected_subject }}">Excel Defaulters</a>
+                        <a class="btn btn-outline btn-sm" href="/attendance/defaulters/pdf?semester_id={{ selected_semester }}&subject_code={{ selected_subject }}">PDF Defaulters</a>
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="panel-body">
+                    <form method="GET" action="/attendance" class="form-grid form-grid-3" style="align-items:end;margin-bottom:18px;">
+                        <div class="form-group">
+                            <label class="form-label">Semester</label>
+                            <select class="form-control" name="semester_id" required>
+                                {% for sem in all_semesters %}<option value="{{ sem.semester_id }}" {% if selected_semester == sem.semester_id %}selected{% endif %}>Semester {{ sem.semester_id }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Subject</label>
+                            <select class="form-control" name="subject_code" required>
+                                <option value="">-- Select --</option>
+                                {% for s in subjects %}<option value="{{ s.subject_code }}" {% if selected_subject == s.subject_code %}selected{% endif %}>{{ s.subject_code }} — {{ s.subject_name }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group"><button class="btn btn-gold" type="submit">View Summary</button></div>
+                    </form>
+
+                    {% if slots %}
+                    <div style="margin-bottom:18px;">
+                        <h3 style="font-family:Playfair Display,serif;font-size:18px;margin-bottom:8px;">Weekly Slots Found</h3>
+                        <table class="data-table">
+                            <thead><tr><th>Day</th><th>Time</th><th>Subject</th><th>Division</th><th>Batch</th><th>Type</th><th>Faculty</th></tr></thead>
+                            <tbody>
+                                {% for slot in slots %}
+                                <tr><td>{{ slot.day_of_week }}</td><td>{{ slot.start_time.strftime('%H:%M') }} - {{ slot.end_time.strftime('%H:%M') }}</td><td>{{ slot.subject_code }}</td><td>{{ slot.division }}</td><td>{{ slot.batch }}</td><td>{{ slot.session_type }}</td><td>{{ slot.faculty_name or '—' }}</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+
+                    {% if summary_rows %}
+                    <table class="data-table">
+                        <thead><tr><th>PRN</th><th>Name</th><th>Total</th><th>Present</th><th>Percentage</th><th>Status</th></tr></thead>
+                        <tbody>
+                            {% for att, stu in summary_rows %}
+                            {% set pct = att.percentage|float %}
+                            <tr>
+                                <td><span class="mono">{{ stu.prn }}</span></td><td>{{ stu.name }}</td><td>{{ att.total_lectures }}</td><td>{{ att.attended_lectures }}</td><td>{{ '%.2f'|format(pct) }}%</td>
+                                <td>{% if pct >= 75 %}<span class="pill pill-open">Safe</span>{% elif pct >= 65 %}<span class="pill pill-locked">Warning</span>{% else %}<span class="pill" style="background:var(--error-bg);color:var(--error);">Critical</span>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <div style="padding:24px;text-align:center;color:var(--text-3);font-size:13px;">No attendance summary uploaded for selected subject yet.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+<script>
+function reloadPageWithSemester(){
+    const sem = document.getElementById('semesterSelect').value;
+    if(sem){ window.location.href = '/attendance?semester_id=' + encodeURIComponent(sem); }
+}
+</script>
+</body>
+</html>

@@ -64,6 +64,8 @@ class Subject(db.Model):
     elective_group       = db.Column(db.String(50), nullable=True)
     parent_subject_code  = db.Column(db.String(20), nullable=True)
     is_audit             = db.Column(db.Boolean, default=False)
+    is_attendance_only   = db.Column(db.Boolean, default=False, nullable=False)
+    is_active            = db.Column(db.Boolean, default=True, nullable=False)
 
     def to_dict(self):
         return {
@@ -76,7 +78,9 @@ class Subject(db.Model):
             'is_elective':         self.is_elective,
             'elective_group':      self.elective_group,
             'parent_subject_code': self.parent_subject_code,
-            'is_audit':            self.is_audit
+            'is_audit':            self.is_audit,
+            'is_attendance_only':   self.is_attendance_only,
+            'is_active':           self.is_active
         }
 
 
@@ -84,8 +88,8 @@ class Subject(db.Model):
 class Enrollment(db.Model):
     __tablename__ = 'student_subject_enrollment'
     __table_args__ = (
-        db.UniqueConstraint('prn', 'subject_code', 'academic_year',
-                            name='uq_enrollment'),
+        db.UniqueConstraint('prn', 'subject_code', 'semester_id', 'academic_year',
+                            name='uq_enrollment_prn_subject_sem_year'),
     )
 
     id            = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -106,8 +110,8 @@ class Enrollment(db.Model):
 class TheoryMarks(db.Model):
     __tablename__ = 'theory_marks'
     __table_args__ = (
-        db.UniqueConstraint('prn', 'subject_code', 'academic_year',
-                            name='uq_theory'),
+        db.UniqueConstraint('prn', 'subject_code', 'semester_id', 'academic_year',
+                            name='uq_theory_prn_subject_sem_year'),
     )
 
     id             = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -166,8 +170,8 @@ class TheoryMarks(db.Model):
 class LabMarks(db.Model):
     __tablename__ = 'lab_marks'
     __table_args__ = (
-        db.UniqueConstraint('prn', 'subject_code', 'academic_year',
-                            name='uq_lab'),
+        db.UniqueConstraint('prn', 'subject_code', 'semester_id', 'academic_year',
+                            name='uq_lab_prn_subject_sem_year'),
     )
 
     id            = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -215,11 +219,115 @@ class LabMarks(db.Model):
 
 
 # ── TABLE 7: attendance ──────────────────────────────────────
+
+
+# ── TABLE 7A: timetable_slots ─────────────────────────────────
+class TimetableSlot(db.Model):
+    """Weekly timetable slot uploaded once per semester.
+
+    This is used to generate date-wise attendance sheets automatically.
+    Example: Monday 10:00-11:15, Semester 6, Division A, Batch ALL, BTECPC601.
+    """
+    __tablename__ = 'timetable_slots'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'semester_id', 'academic_year', 'division', 'batch', 'day_of_week',
+            'start_time', 'end_time', 'subject_code',
+            name='uq_timetable_slot_unique'
+        ),
+    )
+
+    id            = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    semester_id   = db.Column(db.Integer, nullable=False)
+    academic_year = db.Column(db.String(10), nullable=False)
+    division      = db.Column(db.String(10), default='ALL', nullable=False)
+    batch         = db.Column(db.String(10), default='ALL', nullable=False)
+    day_of_week   = db.Column(db.String(10), nullable=False)  # Monday...Saturday
+    start_time    = db.Column(db.Time, nullable=False)
+    end_time      = db.Column(db.Time, nullable=False)
+    subject_code  = db.Column(db.String(20), db.ForeignKey('subjects.subject_code', ondelete='CASCADE'), nullable=False)
+    faculty_name  = db.Column(db.String(100), nullable=True)
+    session_type  = db.Column(db.String(30), default='THEORY', nullable=False)
+    room          = db.Column(db.String(50), nullable=True)
+    is_active     = db.Column(db.Boolean, default=True, nullable=False)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    subject = db.relationship('Subject', backref=db.backref('timetable_slots', lazy='dynamic'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'semester_id': self.semester_id,
+            'academic_year': self.academic_year,
+            'division': self.division,
+            'batch': self.batch,
+            'day_of_week': self.day_of_week,
+            'start_time': self.start_time.strftime('%H:%M') if self.start_time else None,
+            'end_time': self.end_time.strftime('%H:%M') if self.end_time else None,
+            'subject_code': self.subject_code,
+            'faculty_name': self.faculty_name,
+            'session_type': self.session_type,
+            'room': self.room,
+            'is_active': self.is_active,
+        }
+
+
+# ── TABLE 7B: attendance_sessions ─────────────────────────────
+class AttendanceSession(db.Model):
+    """Actual lecture/lab dates generated from weekly timetable.
+
+    One row means one conducted/scheduled class session for a subject on a date.
+    """
+    __tablename__ = 'attendance_sessions'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'semester_id', 'academic_year', 'division', 'batch', 'subject_code',
+            'lecture_date', 'start_time', 'end_time',
+            name='uq_attendance_session_unique'
+        ),
+    )
+
+    id            = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    semester_id   = db.Column(db.Integer, nullable=False)
+    academic_year = db.Column(db.String(10), nullable=False)
+    division      = db.Column(db.String(10), default='ALL', nullable=False)
+    batch         = db.Column(db.String(10), default='ALL', nullable=False)
+    subject_code  = db.Column(db.String(20), db.ForeignKey('subjects.subject_code', ondelete='CASCADE'), nullable=False)
+    lecture_date  = db.Column(db.Date, nullable=False)
+    start_time    = db.Column(db.Time, nullable=False)
+    end_time      = db.Column(db.Time, nullable=False)
+    session_type  = db.Column(db.String(30), default='THEORY', nullable=False)
+    status        = db.Column(db.String(20), default='COMPLETED', nullable=False)  # COMPLETED/CANCELLED/EXTRA
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    subject = db.relationship('Subject', backref=db.backref('attendance_sessions', lazy='dynamic'))
+
+
+# ── TABLE 7C: attendance_entries ──────────────────────────────
+class AttendanceEntry(db.Model):
+    """Per-student date-wise attendance entry."""
+    __tablename__ = 'attendance_entries'
+    __table_args__ = (
+        db.UniqueConstraint('session_id', 'prn', name='uq_attendance_entry_session_prn'),
+    )
+
+    id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    session_id = db.Column(db.Integer, db.ForeignKey('attendance_sessions.id', ondelete='CASCADE'), nullable=False)
+    prn        = db.Column(db.String(20), db.ForeignKey('students.prn', ondelete='CASCADE'), nullable=False)
+    status     = db.Column(db.String(10), default='A', nullable=False)  # P/A/L/O
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    session = db.relationship('AttendanceSession', backref=db.backref('entries', lazy='dynamic'))
+    student = db.relationship('Student', backref=db.backref('attendance_entries', lazy='dynamic'))
+
 class Attendance(db.Model):
     __tablename__ = 'attendance'
     __table_args__ = (
-        db.UniqueConstraint('prn', 'subject_code', 'academic_year',
-                            name='uq_attendance'),
+        db.UniqueConstraint('prn', 'subject_code', 'semester_id', 'academic_year',
+                            name='uq_attendance_prn_subject_sem_year'),
     )
 
     id                = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -261,8 +369,8 @@ class SgpaCgpa(db.Model):
                                    nullable=False)
     semester_id        = db.Column(db.Integer, nullable=False)
     academic_year      = db.Column(db.String(10), nullable=False)
-    sgpa               = db.Column(db.Numeric(4, 2), default=0.00)
-    cgpa               = db.Column(db.Numeric(4, 2), default=0.00)
+    sgpa               = db.Column(db.Numeric(4, 2), default=None, nullable=True)
+    cgpa               = db.Column(db.Numeric(4, 2), default=None, nullable=True)
     credits_registered = db.Column(db.Integer, default=0)
     credits_earned     = db.Column(db.Integer, default=0)
 
@@ -273,8 +381,8 @@ class SgpaCgpa(db.Model):
             'prn':                self.prn,
             'semester_id':        self.semester_id,
             'academic_year':      self.academic_year,
-            'sgpa':               float(self.sgpa) if self.sgpa else 0,
-            'cgpa':               float(self.cgpa) if self.cgpa else 0,
+            'sgpa':               float(self.sgpa) if self.sgpa is not None else None,
+            'cgpa':               float(self.cgpa) if self.cgpa is not None else None,
             'credits_registered': self.credits_registered,
             'credits_earned':     self.credits_earned
         }
@@ -327,51 +435,51 @@ class ExternalMarks(db.Model):
     """
     Stores ESE (End Semester Exam) external marks for THEORY subjects.
     Max = 60  |  Minimum to pass = 20
-    Combined with InternalMarks to compute Final Total, Grade, Grade Point, Credits.
+    Combined with internal marks to compute final total, grade, grade point, and credits.
     """
     __tablename__ = "external_marks"
-
-    id            = db.Column(db.Integer,     primary_key=True, autoincrement=True)
-    prn           = db.Column(db.String(20),  db.ForeignKey("students.prn", ondelete="CASCADE"), nullable=False)
-    subject_code  = db.Column(db.String(20),  db.ForeignKey("subjects.subject_code", ondelete="CASCADE"), nullable=False)
-    semester_id   = db.Column(db.Integer,     nullable=False)
-    academic_year = db.Column(db.String(10),  nullable=False)          # e.g. "2024-25"
-    external_marks= db.Column(db.Numeric(4,1),nullable=True)           # 0.0 – 60.0
-    locked        = db.Column(db.Boolean,     default=False, nullable=False)
-    created_at    = db.Column(db.DateTime,    default=datetime.utcnow)
-    updated_at    = db.Column(db.DateTime,    default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # Relationships (adjust back-ref names to match your existing models)
-    student  = db.relationship("Student",  backref=db.backref("external_marks", lazy="dynamic"))
-    subject  = db.relationship("Subject",  backref=db.backref("external_marks", lazy="dynamic"))
-
     __table_args__ = (
-        db.UniqueConstraint("prn", "subject_code", "academic_year",
-                            name="uq_external_student_subject_year"),
+        db.UniqueConstraint(
+            "prn", "subject_code", "semester_id", "academic_year",
+            name="uq_external_prn_subject_sem_year"
+        ),
     )
 
-    def __repr__(self):
-        return (f"<ExternalMarks student={self.prn} "
-                f"subject={self.subject_code} marks={self.external_marks}>")
+    id             = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    prn            = db.Column(db.String(20), db.ForeignKey("students.prn", ondelete="CASCADE"), nullable=False)
+    subject_code   = db.Column(db.String(20), db.ForeignKey("subjects.subject_code", ondelete="CASCADE"), nullable=False)
+    semester_id    = db.Column(db.Integer, nullable=False)
+    academic_year  = db.Column(db.String(10), nullable=False)
+    external_marks = db.Column(db.Numeric(4, 1), nullable=True)
+    locked         = db.Column(db.Boolean, default=False, nullable=False)
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at     = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # ── Convenience Properties ────────────────────────────────────────────────
+    student = db.relationship("Student", backref=db.backref("external_marks", lazy="dynamic"))
+    subject = db.relationship("Subject", backref=db.backref("external_marks", lazy="dynamic"))
+
+    def __repr__(self):
+        return (
+            f"<ExternalMarks prn={self.prn} subject={self.subject_code} "
+            f"semester={self.semester_id} marks={self.external_marks}>"
+        )
 
     @property
     def is_passed_external(self):
-        """ESE pass condition: external >= 20"""
+        """ESE pass condition: external >= 20."""
         if self.external_marks is None:
             return None
         return float(self.external_marks) >= 20.0
 
     def to_dict(self):
         return {
-            "id":            self.id,
-            "prn":           self.prn,
-            "subject_code":  self.subject_code,
-            "semester_id":   self.semester_id,
-            "academic_year": self.academic_year,
-            "external_marks":float(self.external_marks) if self.external_marks is not None else None,
-            "locked":        self.locked,
-            "created_at":    self.created_at.isoformat() if self.created_at else None,
-            "updated_at":    self.updated_at.isoformat() if self.updated_at else None,
+            "id":             self.id,
+            "prn":            self.prn,
+            "subject_code":   self.subject_code,
+            "semester_id":    self.semester_id,
+            "academic_year":  self.academic_year,
+            "external_marks": float(self.external_marks) if self.external_marks is not None else None,
+            "locked":         self.locked,
+            "created_at":     self.created_at.isoformat() if self.created_at else None,
+            "updated_at":     self.updated_at.isoformat() if self.updated_at else None,
         }

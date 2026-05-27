@@ -65,6 +65,11 @@
                     Lab Marks
                     <span class="sb-badge new">Lab</span>
                 </a>
+                <a class="sb-nav-item" href="/attendance">
+                    <span class="sb-icon">&#128197;</span>
+                    Attendance
+                    <span class="sb-badge new">TT</span>
+                </a>
             </div>
 
             <div class="sb-divider"></div>
@@ -93,6 +98,11 @@
                 <a class="sb-nav-item" href="/batches">
                     <span class="sb-icon">&#128101;</span>
                     Batch / Division Setup
+                    <span class="sb-badge">Admin</span>
+                </a>
+                <a class="sb-nav-item" href="/subjects">
+                    <span class="sb-icon">&#128218;</span>
+                    Subject Management
                     <span class="sb-badge">Admin</span>
                 </a>
                 <button class="sb-nav-item" onclick="showSection('dept-summary')">
@@ -190,14 +200,54 @@
                         </div>
                     </div>
                     <div class="stat-card forest">
-                        <div class="stat-icon">&#9989;</div>
+                        <div class="stat-icon">&#128197;</div>
                         <div class="stat-value">
-                            {{ locked_count }}
+                            {{ attendance_count }}
                         </div>
-                        <div class="stat-label">CT1 Locked</div>
-                        <div class="stat-sub">Subjects with CT1 submitted</div>
+                        <div class="stat-label">Attendance Subjects</div>
+                        <div class="stat-sub">Includes timetable activities</div>
                     </div>
                 </div>
+
+
+                {% if current_user.role == 'ADMIN' %}
+                <div class="panel" style="margin-top:18px;">
+                    <div class="panel-header">
+                        <div class="panel-header-icon gold">&#9881;</div>
+                        <div>
+                            <div class="panel-title">Active Semester Control</div>
+                            <div class="panel-sub">Set the semester used by dashboard, CT, external, lab, and reports.</div>
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <form method="POST" action="/set-active-semester" class="form-grid-3" style="align-items:end;">
+                            <div class="form-group">
+                                <label class="form-label">Semester</label>
+                                <select class="form-control" name="semester_id" required>
+                                    {% for sem in all_semesters %}
+                                    <option value="{{ sem.semester_id }}" {% if active_sem and sem.semester_id == active_sem.semester_id and sem.academic_year == active_sem.academic_year %}selected{% endif %}>
+                                        Semester {{ sem.semester_id }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Academic Year</label>
+                                <select class="form-control" name="academic_year" required>
+                                    {% for sem in all_semesters %}
+                                    <option value="{{ sem.academic_year }}" {% if active_sem and sem.semester_id == active_sem.semester_id and sem.academic_year == active_sem.academic_year %}selected{% endif %}>
+                                        {{ sem.academic_year }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <button type="submit" class="btn btn-primary">Set Active Semester</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                {% endif %}
 
                 <!-- Quick actions -->
                 <div class="ornament">
@@ -234,6 +284,15 @@
                             Upload CA1, CA2 and practical external marks for lab and project subjects.
                         </div>
                         <div class="action-card-arrow">Go to Lab Marks &rarr;</div>
+                    </a>
+
+                    <a class="action-card gold-card" href="/attendance" style="text-decoration:none;">
+                        <div class="action-card-icon">&#128197;</div>
+                        <div class="action-card-title">Smart Attendance</div>
+                        <div class="action-card-desc">
+                            Upload weekly timetable, generate subject-wise attendance templates, and create defaulter reports.
+                        </div>
+                        <div class="action-card-arrow">Go to Attendance &rarr;</div>
                     </a>
 
                     <a class="action-card teal-card" href="/batches" style="text-decoration:none;">

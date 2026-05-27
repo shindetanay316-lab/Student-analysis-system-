@@ -1,12 +1,17 @@
 from io import BytesIO
+import os
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+from openpyxl.drawing.image import Image
 
-from models import db, Student, Subject, Enrollment, TheoryMarks, LabMarks
+from models import db, Student, Subject, Enrollment, TheoryMarks, LabMarks, ExternalMarks
 from calculations import compute_final_result, compute_lab_result, get_grade, update_internal_totals, is_theory_internal_complete
 
 
 TNR = "Times New Roman"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LEFT_LOGO = os.path.join(BASE_DIR, "static", "images", "left_logo.jpg")
+RIGHT_LOGO = os.path.join(BASE_DIR, "static", "images", "right_logo.png")
 
 
 # -------------------------------------------------
@@ -287,23 +292,49 @@ def build_student_semester_result(prn, semester_id, academic_year):
                 academic_year=academic_year
             ).first()
 
+            ext_row = ExternalMarks.query.filter_by(
+                prn=prn,
+                subject_code=subject.subject_code,
+                semester_id=semester_id,
+                academic_year=academic_year
+            ).first()
+
+            external_val = None
             if marks and marks.external is not None:
-                recalculate_theory_result(marks)
+                external_val = marks.external
+            elif ext_row and ext_row.external_marks is not None:
+                external_val = ext_row.external_marks
 
-                if marks.is_passed is None or marks.total_marks is None:
-                    is_complete = False
-                else:
-                    internal = marks.internal_total
-                    external = marks.external
-                    total = marks.total_marks
-                    grade = marks.grade or "-"
-                    grade_point = marks.grade_point
-                    result = "PASS" if marks.is_passed is True else "FAIL"
+            # Show external marks even when internal marks are still pending, but
+            # do not create a blank TheoryMarks row just for external marks.
+            external = external_val
 
-                    if marks.is_passed is True:
-                        credits_earned += credits
+            if marks:
+                update_internal_totals(marks)
+                internal = marks.internal_total if is_theory_internal_complete(marks) else None
+
+                if marks.external is None and external_val is not None:
+                    marks.external = external_val
+
+                if is_theory_internal_complete(marks) and external_val is not None:
+                    recalculate_theory_result(marks)
+
+                    if marks.is_passed is None or marks.total_marks is None:
+                        is_complete = False
                     else:
-                        has_failed = True
+                        internal = marks.internal_total
+                        external = marks.external
+                        total = marks.total_marks
+                        grade = marks.grade or "-"
+                        grade_point = marks.grade_point
+                        result = "PASS" if marks.is_passed is True else "FAIL"
+
+                        if marks.is_passed is True:
+                            credits_earned += credits
+                        else:
+                            has_failed = True
+                else:
+                    is_complete = False
             else:
                 is_complete = False
 
@@ -415,52 +446,37 @@ def build_semester_result(semester_id, academic_year):
 # -------------------------------------------------
 def calculate_cgpa_for_student(prn, upto_semester_id=None):
     """
-    CGPA includes both theory and lab/project marks.
-    Audit subjects are excluded.
+    Calculate CGPA only when every semester up to selected semester is complete.
+    If any earlier semester is PENDING, CGPA is also PENDING/blank.
     """
+    sem_query = (
+        db.session.query(Enrollment.semester_id, Enrollment.academic_year)
+        .filter(Enrollment.prn == prn)
+        .distinct()
+        .order_by(Enrollment.semester_id)
+    )
+
+    if upto_semester_id is not None:
+        sem_query = sem_query.filter(Enrollment.semester_id <= upto_semester_id)
+
+    semesters = sem_query.all()
+    if not semesters:
+        return None
 
     total_credits = 0
     total_credit_points = 0
 
-    theory_query = (
-        db.session.query(TheoryMarks, Subject)
-        .join(Subject, TheoryMarks.subject_code == Subject.subject_code)
-        .filter(
-            TheoryMarks.prn == prn,
-            Subject.subject_type == "THEORY",
-            Subject.is_audit == False
-        )
-    )
+    for sem_id, ay in semesters:
+        sem_result = build_student_semester_result(prn, sem_id, ay)
+        if not sem_result["is_complete"] or sem_result["sgpa"] is None:
+            return None
 
-    lab_query = (
-        db.session.query(LabMarks, Subject)
-        .join(Subject, LabMarks.subject_code == Subject.subject_code)
-        .filter(
-            LabMarks.prn == prn,
-            Subject.subject_type != "THEORY",
-            Subject.is_audit == False
-        )
-    )
+        credits = int(sem_result["total_credits"] or 0)
+        if credits <= 0:
+            return None
 
-    if upto_semester_id is not None:
-        theory_query = theory_query.filter(TheoryMarks.semester_id <= upto_semester_id)
-        lab_query = lab_query.filter(LabMarks.semester_id <= upto_semester_id)
-
-    for marks, subject in theory_query.all():
-        if marks.grade_point is None:
-            continue
-
-        credits = int(subject.credits or 0)
         total_credits += credits
-        total_credit_points += credits * _safe_float(marks.grade_point)
-
-    for marks, subject in lab_query.all():
-        if marks.grade_point is None:
-            continue
-
-        credits = int(subject.credits or 0)
-        total_credits += credits
-        total_credit_points += credits * _safe_float(marks.grade_point)
+        total_credit_points += credits * _safe_float(sem_result["sgpa"])
 
     if total_credits == 0:
         return None
@@ -508,26 +524,57 @@ def generate_sgpa_cgpa_excel_report(semester_id, academic_year):
     ws = wb.active
     ws.title = "SGPA CGPA Report"
 
-    ws.column_dimensions["A"].width = 8
-    ws.column_dimensions["B"].width = 18
-    ws.column_dimensions["C"].width = 30
-    ws.column_dimensions["D"].width = 12
-    ws.column_dimensions["E"].width = 14
-    ws.column_dimensions["F"].width = 14
-    ws.column_dimensions["G"].width = 16
-    ws.column_dimensions["H"].width = 16
-    ws.column_dimensions["I"].width = 14
+    widths = [8, 18, 30, 12, 14, 14, 16, 16, 14]
+    for i, width in enumerate(widths, start=1):
+        ws.column_dimensions[chr(64 + i)].width = width
 
-    ws.merge_cells("A1:I1")
-    title = ws["A1"]
+    # Official common header with logos, matching other ECE SMS reports.
+    for r in range(1, 6):
+        ws.row_dimensions[r].height = 24
+    ws.row_dimensions[1].height = 70
+
+    if os.path.exists(LEFT_LOGO):
+        left_logo = Image(LEFT_LOGO)
+        left_logo.width = 85
+        left_logo.height = 85
+        ws.add_image(left_logo, "A1")
+
+    if os.path.exists(RIGHT_LOGO):
+        right_logo = Image(RIGHT_LOGO)
+        right_logo.width = 85
+        right_logo.height = 85
+        ws.add_image(right_logo, "I1")
+
+    ws.merge_cells("B1:H1")
+    ws["B1"] = "Chhatrapati Shahu Maharaj Shikshan Sanstha's"
+    ws.merge_cells("B2:H2")
+    ws["B2"] = "CSMSS Chh. Shahu College of Engineering"
+    ws.merge_cells("B3:H3")
+    ws["B3"] = "Kanchanwadi, Chhatrapati Sambhajinagar – 431011"
+    ws.merge_cells("B4:H5")
+    ws["B4"] = "Department of Electronics and Computer Engineering"
+
+    for row in range(1, 6):
+        for col in range(1, 10):
+            c = ws.cell(row=row, column=col)
+            c.border = _thin_border()
+            c.alignment = _center()
+
+    ws["B1"].font = Font(name=TNR, size=12)
+    ws["B2"].font = Font(name=TNR, size=18, bold=True)
+    ws["B3"].font = Font(name=TNR, size=11)
+    ws["B4"].font = Font(name=TNR, size=16, bold=True)
+
+    ws.merge_cells("A6:I6")
+    title = ws["A6"]
     title.value = "SGPA / CGPA REPORT"
     title.font = _title_font()
     title.alignment = _center()
     title.fill = _title_fill()
     title.border = _thin_border()
 
-    ws.merge_cells("A2:I2")
-    sub = ws["A2"]
+    ws.merge_cells("A7:I7")
+    sub = ws["A7"]
     sub.value = f"Semester: {semester_id}     Academic Year: {academic_year}"
     sub.font = _body_font(bold=True)
     sub.alignment = _center()
@@ -542,10 +589,10 @@ def generate_sgpa_cgpa_excel_report(semester_id, academic_year):
         "CGPA",
         "Total Credits",
         "Credit Points",
-        "Result"
+        "Result",
     ]
 
-    start_row = 4
+    start_row = 9
 
     for col, header in enumerate(headers, start=1):
         cell = ws.cell(row=start_row, column=col)
@@ -557,7 +604,6 @@ def generate_sgpa_cgpa_excel_report(semester_id, academic_year):
 
     for idx, row in enumerate(rows, start=1):
         r = start_row + idx
-
         values = [
             idx,
             row["prn"],
@@ -567,7 +613,7 @@ def generate_sgpa_cgpa_excel_report(semester_id, academic_year):
             row["cgpa"] if row["cgpa"] is not None else "PENDING",
             row["total_credits"],
             row["total_credit_points"],
-            row["result"]
+            row["result"],
         ]
 
         for col, value in enumerate(values, start=1):
@@ -576,6 +622,21 @@ def generate_sgpa_cgpa_excel_report(semester_id, academic_year):
             cell.font = _body_font()
             cell.alignment = _center() if col != 3 else _left()
             cell.border = _thin_border()
+
+    sig_row = start_row + len(rows) + 4
+    ws.merge_cells(start_row=sig_row, start_column=1, end_row=sig_row, end_column=3)
+    ws.merge_cells(start_row=sig_row, start_column=4, end_row=sig_row, end_column=6)
+    ws.merge_cells(start_row=sig_row, start_column=7, end_row=sig_row, end_column=9)
+
+    for cell_ref, label in [(f"A{sig_row}", "Result Coordinator"), (f"D{sig_row}", "HOD"), (f"G{sig_row}", "Principal")]:
+        c = ws[cell_ref]
+        c.value = label
+        c.font = _body_font(bold=True)
+        c.alignment = _center()
+
+    for row in ws.iter_rows(min_row=sig_row, max_row=sig_row, min_col=1, max_col=9):
+        for cell in row:
+            cell.border = Border(top=Side(style="medium", color="000000"))
 
     output = BytesIO()
     wb.save(output)

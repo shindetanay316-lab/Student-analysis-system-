@@ -66,27 +66,32 @@ EXAM_DISPLAY_LABEL = {
 }
 
 
-def _visible_summary_subjects(semester_id):
-    """Fetch summary subjects from database, not from a hardcoded list.
+def _visible_summary_subjects(semester_id, academic_year):
+    """Fetch only summary subjects that actually have enrolled students.
 
     Rules:
     - THEORY subjects only
     - audit subjects excluded
-    - compulsory subjects included
-    - real elective options included
-    - generic elective parent rows hidden
+    - generic elective parent rows hidden automatically because they have no enrollment
+    - elective options with zero students are hidden
     """
+    enrolled_exists = (
+        db.session.query(Enrollment.id)
+        .filter(
+            Enrollment.subject_code == Subject.subject_code,
+            Enrollment.semester_id == semester_id,
+            Enrollment.academic_year == academic_year,
+        )
+        .exists()
+    )
+
     return (
         Subject.query
         .filter(Subject.semester_id == semester_id)
         .filter(Subject.subject_type == "THEORY")
         .filter(Subject.is_audit == False)
-        .filter(
-            or_(
-                Subject.is_elective == False,
-                Subject.parent_subject_code.isnot(None),
-            )
-        )
+        .filter(Subject.is_active == True)
+        .filter(enrolled_exists)
         .order_by(Subject.subject_code)
         .all()
     )
@@ -129,7 +134,7 @@ def build_summary_data(
     - Audit subjects and generic elective parent rows are hidden.
     """
     exam_type   = exam_type.upper()
-    subjects    = _visible_summary_subjects(semester_id)
+    subjects    = _visible_summary_subjects(semester_id, academic_year)
     column_name = EXAM_COLUMN_MAP.get(exam_type, "ct1")
     pass_mark   = PASS_THRESHOLD.get(exam_type, 4)
 

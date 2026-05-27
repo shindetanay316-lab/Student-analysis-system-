@@ -83,8 +83,17 @@ def get_semester_row(semester_id=None, academic_year=None):
 
 
 def visible_subjects_query(semester_id=None, subject_types=None):
-    """Common visible-subject query used by marks, lab, external, and reports."""
-    query = Subject.query.filter(Subject.is_audit == False)
+    """Common visible-subject query used by marks, lab, external, and reports.
+
+    Subject Management can soft-disable a subject by setting is_active=False.
+    Disabled subjects remain in the database for old records, but are hidden
+    from new marks entry and dropdowns.
+    """
+    query = Subject.query.filter(
+        Subject.is_audit == False,
+        Subject.is_active == True,
+        Subject.is_attendance_only == False,
+    )
 
     if semester_id is not None:
         query = query.filter(Subject.semester_id == semester_id)
@@ -113,3 +122,16 @@ def visible_theory_subjects_query(semester_id=None):
 def visible_lab_subjects_query(semester_id=None):
     """Visible LAB / PROJECT subjects only."""
     return visible_subjects_query(semester_id, ["LAB", "PROJECT"])
+
+
+
+def attendance_subjects_query(semester_id=None):
+    """Subjects visible in the attendance module.
+
+    Includes normal theory/lab/project subjects plus audit/attendance-only timetable activities.
+    This keeps non-credit timetable sessions available for attendance without affecting SGPA/CGPA.
+    """
+    query = Subject.query.filter(Subject.is_active == True)
+    if semester_id is not None:
+        query = query.filter(Subject.semester_id == semester_id)
+    return query.order_by(Subject.semester_id, Subject.subject_code)

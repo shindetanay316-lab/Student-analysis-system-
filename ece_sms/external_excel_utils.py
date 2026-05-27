@@ -3,6 +3,7 @@ import re
 import os
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+from openpyxl.styles.protection import Protection
 from openpyxl.drawing.image import Image
 from models import Student, Enrollment, TheoryMarks
 
@@ -180,8 +181,7 @@ def generate_external_template(meta, students):
     ws.protection.sheet = True
     ws.protection.password = "ecesms"
     for i in range(1, len(students) + 1):
-        ws.cell(row=header_row + i, column=5).protection = \
-            __import__("openpyxl.styles.protection", fromlist=["Protection"]).Protection(locked=False)
+        ws.cell(row=header_row + i, column=5).protection = Protection(locked=False)
 
     buf = io.BytesIO()
     wb.save(buf)

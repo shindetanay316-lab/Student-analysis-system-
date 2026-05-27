@@ -12,7 +12,7 @@
 #      from calculations import compute_final_result, update_sgpa_cgpa
 # ─────────────────────────────────────────────────────────────────────────────
 
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 
 
 # ── GRADING TABLE (as per DBATU Syllabus) ────────────────────────────────────
@@ -180,9 +180,13 @@ def compute_lab_result(ca1_marks: float, ca2_marks: float, external_marks: float
 
 def calculate_sgpa(subject_results: list):
     """
-    subject_results: list of dicts, each with keys:
-        credits_registered, grade_point, is_passed
-        (audit subjects should be EXCLUDED before passing in)
+    Safe SGPA calculation.
+
+    Rules:
+    - Completed passed/failed subjects are included.
+    - Pending/incomplete subjects are skipped.
+    - Failed subjects count in registered credits with grade point 0.
+    - None grade_point / None is_passed will NOT crash the app.
 
     Returns: (sgpa, credits_registered_total, credits_earned_total)
     """
@@ -190,16 +194,38 @@ def calculate_sgpa(subject_results: list):
     total_credits_registered = 0
     total_credits_earned = 0
 
-    for r in subject_results:
-        cr = int(r["credits_registered"])
-        gp = Decimal(str(r["grade_point"]))
-        total_credit_points      += cr * gp
+    for r in subject_results or []:
+        credits = r.get("credits_registered", r.get("credits", 0))
+        grade_point = r.get("grade_point")
+        is_passed = r.get("is_passed")
+
+        try:
+            cr = int(credits or 0)
+        except (TypeError, ValueError):
+            continue
+
+        if cr <= 0:
+            continue
+
+        # Pending/incomplete result: skip from SGPA instead of crashing or inflating.
+        if grade_point is None or is_passed is None:
+            continue
+
+        try:
+            gp = Decimal(str(grade_point))
+        except (InvalidOperation, TypeError, ValueError):
+            continue
+
+        total_credit_points += cr * gp
         total_credits_registered += cr
-        if r["is_passed"]:
+
+        if bool(is_passed):
             total_credits_earned += cr
 
     if total_credits_registered == 0:
-        return Decimal("0.00"), 0, 0
+        # No completed non-audit subjects yet. Keep SGPA pending instead
+        # of writing a misleading 0.00 value.
+        return None, 0, 0
 
     sgpa = (total_credit_points / total_credits_registered).quantize(
         Decimal("0.01"), rounding=ROUND_HALF_UP
@@ -213,27 +239,37 @@ def calculate_cgpa(semester_sgpa_list: list):
         credits_registered, credits_earned, sgpa
         (one dict per completed semester)
 
-    Returns: cgpa (Decimal)
+    Returns: cgpa (Decimal) or None when CGPA is still pending.
     """
-    # CGPA = Σ(credits_registered_i × sgpa_i) / Σ(credits_registered_i)
-    numerator   = Decimal("0.0")
+    numerator = Decimal("0.0")
     denominator = 0
 
-    for s in semester_sgpa_list:
-        cr   = int(s["credits_registered"])
-        sgpa = Decimal(str(s["sgpa"]))
-        numerator   += cr * sgpa
+    for s in semester_sgpa_list or []:
+        sgpa = s.get("sgpa")
+        if sgpa is None:
+            return None
+
+        try:
+            cr = int(s.get("credits_registered") or 0)
+            sg = Decimal(str(sgpa))
+        except (TypeError, ValueError, InvalidOperation):
+            return None
+
+        if cr <= 0:
+            return None
+
+        numerator += cr * sg
         denominator += cr
 
     if denominator == 0:
-        return Decimal("0.00")
+        return None
 
     return (numerator / denominator).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 # ── DB UPDATE HELPERS (call from Flask routes after saving ExternalMarks) ─────
 
-def update_sgpa_cgpa_for_student(prn, semester_id, academic_year, db, models):
+def update_sgpa_cgpa_for_student(prn, semester_id, academic_year, db, models, commit=True):
     """
     Recalculates and saves SGPA + CGPA for one student after external marks upload.
 
@@ -270,12 +306,14 @@ def update_sgpa_cgpa_for_student(prn, semester_id, academic_year, db, models):
             tm_row = models.TheoryMarks.query.filter_by(
                 prn=prn,
                 subject_code=subj.subject_code,
+                semester_id=semester_id,
                 academic_year=academic_year,
             ).first()
 
             ext_row = models.ExternalMarks.query.filter_by(
                 prn=prn,
                 subject_code=subj.subject_code,
+                semester_id=semester_id,
                 academic_year=academic_year,
             ).first()
 
@@ -357,11 +395,11 @@ def update_sgpa_cgpa_for_student(prn, semester_id, academic_year, db, models):
         )
         db.session.add(row)
 
-    if has_missing_marks:
+    if has_missing_marks or total_non_audit_credits <= 0:
         sgpa = None
         cr_reg = total_non_audit_credits
         cr_earned = 0
-        
+
         row.sgpa               = None
         row.credits_registered = cr_reg
         row.credits_earned     = cr_earned
@@ -390,12 +428,15 @@ def update_sgpa_cgpa_for_student(prn, semester_id, academic_year, db, models):
     running_credit_points = Decimal("0.0")
     running_registered_credits = 0
     cgpa_for_requested_semester = None
+    cgpa_blocked_by_pending_semester = False
 
     for s in all_sem_rows:
-        # If SGPA is pending for this semester, CGPA for this exact row is also pending.
-        # Do not use future semester SGPA to fill an older/pending row.
-        if s.sgpa is None:
+        # Once any earlier semester is pending, CGPA for that semester and every
+        # later semester must stay pending. Otherwise Sem 6 could wrongly show
+        # CGPA using only Sem 6 while Sem 3/4/5 is incomplete.
+        if s.sgpa is None or cgpa_blocked_by_pending_semester:
             s.cgpa = None
+            cgpa_blocked_by_pending_semester = True
             if s.semester_id == semester_id and s.academic_year == academic_year:
                 cgpa_for_requested_semester = None
             continue
@@ -403,6 +444,7 @@ def update_sgpa_cgpa_for_student(prn, semester_id, academic_year, db, models):
         cr = int(s.credits_registered or 0)
         if cr <= 0:
             s.cgpa = None
+            cgpa_blocked_by_pending_semester = True
             if s.semester_id == semester_id and s.academic_year == academic_year:
                 cgpa_for_requested_semester = None
             continue
@@ -419,7 +461,8 @@ def update_sgpa_cgpa_for_student(prn, semester_id, academic_year, db, models):
         if s.semester_id == semester_id and s.academic_year == academic_year:
             cgpa_for_requested_semester = current_cgpa
 
-    db.session.commit()
+    if commit:
+        db.session.commit()
 
     return {
         "sgpa":               float(sgpa) if sgpa is not None else None,
@@ -498,10 +541,21 @@ def update_internal_totals(row):
       ca_marks       -> CA1 + CA2
       internal_total -> CA1 + CA2 + MSE
     """
-    ct1 = float(row.ct1 or 0)
-    ct2 = float(row.ct2 or 0)
-    assignment = float(row.assignment or 0)
-    midsem = float(row.midsem or 0)
+    if row is None:
+        return row
+
+    # Do not treat missing internal components as zero. Missing CT/Assignment/MSE
+    # means the subject result is still PENDING, not FAIL and not 0 internal.
+    if not is_theory_internal_complete(row):
+        row.best_ct = None
+        row.ca_marks = None
+        row.internal_total = None
+        return row
+
+    ct1 = float(row.ct1)
+    ct2 = float(row.ct2)
+    assignment = float(row.assignment)
+    midsem = float(row.midsem)
 
     scores = sorted([ct1, ct2, assignment], reverse=True)
 

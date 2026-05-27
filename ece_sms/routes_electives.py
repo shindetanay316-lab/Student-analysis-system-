@@ -24,6 +24,7 @@ def _option_subjects_query(semester_id, elective_group=None):
     q = (
         Subject.query
         .filter(Subject.semester_id == semester_id)
+        .filter(Subject.is_active == True)
         .filter(Subject.is_elective == True)
         .filter(Subject.parent_subject_code.isnot(None))
         .filter(Subject.elective_group.isnot(None))
@@ -65,6 +66,7 @@ def _load_page_data(selected_semester, selected_group, selected_subject):
         group_rows = (
             db.session.query(Subject.elective_group)
             .filter(Subject.semester_id == selected_semester)
+            .filter(Subject.is_active == True)
             .filter(Subject.is_elective == True)
             .filter(Subject.parent_subject_code.isnot(None))
             .filter(Subject.elective_group.isnot(None))
@@ -183,6 +185,7 @@ def save_elective_assignment():
         subject_code=subject_code,
         semester_id=semester_id,
         elective_group=elective_group,
+        is_active=True,
     ).first()
 
     if (

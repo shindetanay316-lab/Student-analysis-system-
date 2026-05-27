@@ -174,7 +174,14 @@
 
                     <div class="form-group" style="margin-bottom:16px;">
                         <label class="form-label">Select Completed Lab Excel File (.xlsx)</label>
-                        <input type="file" name="lab_file" accept=".xlsx" class="form-control" required>
+                        <div class="file-drop-zone" id="labDropZone"
+                            onclick="document.getElementById('labFile').click()">
+                            <div class="file-drop-text" id="labFileDropText">
+                                Click to select file or drag and drop here
+                            </div>
+                            <input type="file" name="lab_file" id="labFile" accept=".xlsx" hidden required
+                                onchange="updateLabFileName(this)">
+                        </div>
                     </div>
 
                     <div class="btn-row">
@@ -254,6 +261,40 @@
             ECE Student Management System — Lab / Project Marks Module
         </div>
     </footer>
+
+    <script>
+        function updateLabFileName(input) {
+            const text = document.getElementById('labFileDropText');
+            if (text && input.files && input.files[0]) {
+                text.textContent = 'Selected: ' + input.files[0].name;
+                text.style.color = '#1A2B4A';
+                text.style.fontWeight = 'bold';
+            }
+        }
+
+        const labDropZone = document.getElementById('labDropZone');
+        const labFile = document.getElementById('labFile');
+
+        if (labDropZone && labFile) {
+            labDropZone.addEventListener('dragover', function (e) {
+                e.preventDefault();
+                labDropZone.classList.add('drag-over');
+            });
+
+            labDropZone.addEventListener('dragleave', function () {
+                labDropZone.classList.remove('drag-over');
+            });
+
+            labDropZone.addEventListener('drop', function (e) {
+                e.preventDefault();
+                labDropZone.classList.remove('drag-over');
+                if (e.dataTransfer.files.length > 0) {
+                    labFile.files = e.dataTransfer.files;
+                    updateLabFileName(labFile);
+                }
+            });
+        }
+    </script>
 </body>
 
 </html>

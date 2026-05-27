@@ -13,7 +13,8 @@ from reportlab.platypus import (
     Spacer,
     Table,
     TableStyle,
-    Image
+    Image,
+    KeepTogether
 )
 import os
 
@@ -353,9 +354,6 @@ def generate_ct1_pdf_report(meta, data):
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
     ]))
 
-    story.append(analysis)
-    story.append(Spacer(1, 30))
-
     # ============================================================
     # SIGNATURES
     # ============================================================
@@ -371,7 +369,10 @@ def generate_ct1_pdf_report(meta, data):
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
     ]))
 
-    story.append(sig_tab)
+    # Keep analysis rows and the signature block together. If there is not enough
+    # room at the bottom of the page, ReportLab moves this complete block to the
+    # next page instead of splitting the analysis table awkwardly.
+    story.append(KeepTogether([analysis, Spacer(1, 30), sig_tab]))
 
     # ============================================================
     # BUILD
