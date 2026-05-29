@@ -340,6 +340,8 @@ def upload_external():
     subject_code  = request.form.get("subject_code", "").strip()
     semester_id   = request.form.get("semester_id", type=int)
     academic_year = request.form.get("academic_year", "").strip()
+    division      = clean_filter(request.form.get("division", ""))
+    batch         = clean_filter(request.form.get("batch", ""))
 
     if not semester_id:
         flash("Please select a semester.", "error")
@@ -366,7 +368,8 @@ def upload_external():
         flash('Upload failed. Errors:<br>' + '<br>'.join(error_msgs), 'error')
         return redirect(url_for("external.external_marks_page",
                                 semester_id=semester_id, subject_code=subject_code,
-                                academic_year=academic_year))
+                                academic_year=academic_year,
+                                division=division, batch=batch))
 
     errors  = []
     saved   = 0
@@ -453,7 +456,8 @@ def upload_external():
 
     return redirect(url_for("external.external_marks_page",
                             semester_id=semester_id, subject_code=subject_code,
-                            academic_year=academic_year))
+                            academic_year=academic_year,
+                            division=division, batch=batch))
 
 
 # ── ROUTE: /download-external-template ───────────────────────────────────────
@@ -820,6 +824,8 @@ def external_stats():
 def download_sgpa_cgpa_excel():
     semester_id = request.args.get("semester_id", type=int)
     academic_year = request.args.get("academic_year", "").strip()
+    division = clean_filter(request.args.get("division", ""))
+    batch = clean_filter(request.args.get("batch", ""))
 
     if not semester_id:
         flash("Please select semester first.", "error")
@@ -833,7 +839,9 @@ def download_sgpa_cgpa_excel():
 
     output, filename = generate_sgpa_cgpa_excel_report(
         semester_id=semester_id,
-        academic_year=academic_year
+        academic_year=academic_year,
+        division=division,
+        batch=batch,
     )
 
     return send_file(

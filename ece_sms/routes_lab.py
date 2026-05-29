@@ -155,7 +155,7 @@ def download_lab_template():
     subj = _visible_lab_subjects_query(semester_id).filter(models.Subject.subject_code == subject_code).first()
     if not subj:
         flash("Lab/project subject not found.", "error")
-        return redirect(url_for("lab.lab_marks_page", semester_id=semester_id))
+        return redirect(url_for("lab.lab_marks_page", semester_id=semester_id, division=division, batch=batch))
 
     students = _get_lab_students(subject_code, semester_id, academic_year, division, batch)
     if not students:
@@ -199,18 +199,18 @@ def upload_lab():
 
     if not file or not file.filename.endswith(".xlsx"):
         flash("Please upload a valid .xlsx lab marks file.", "error")
-        return redirect(url_for("lab.lab_marks_page", semester_id=semester_id, subject_code=subject_code))
+        return redirect(url_for("lab.lab_marks_page", semester_id=semester_id, subject_code=subject_code, division=division, batch=batch))
 
     subj = _visible_lab_subjects_query(semester_id).filter(models.Subject.subject_code == subject_code).first()
     if not subj:
         flash("Lab/project subject not found.", "error")
-        return redirect(url_for("lab.lab_marks_page", semester_id=semester_id))
+        return redirect(url_for("lab.lab_marks_page", semester_id=semester_id, division=division, batch=batch))
 
     success, result_data, count = parse_lab_upload(file, subject_code, semester_id, academic_year)
     if not success:
         error_msgs = [f"Row {e['row']}: {e['col']} - {e['msg']}" for e in result_data]
         flash("Upload failed. Errors:<br>" + "<br>".join(error_msgs), "error")
-        return redirect(url_for("lab.lab_marks_page", semester_id=semester_id, subject_code=subject_code))
+        return redirect(url_for("lab.lab_marks_page", semester_id=semester_id, subject_code=subject_code, division=division, batch=batch))
 
     saved = 0
     skipped = 0
@@ -278,7 +278,7 @@ def download_lab_report_excel():
     data, meta = build_lab_report_data(subject_code, semester_id, academic_year, division=division, batch=batch)
     if not data:
         flash("No lab report data found.", "error")
-        return redirect(url_for("lab.lab_marks_page", semester_id=semester_id, subject_code=subject_code))
+        return redirect(url_for("lab.lab_marks_page", semester_id=semester_id, subject_code=subject_code, division=division, batch=batch))
 
     buf, filename = generate_lab_excel_report(meta, data)
     return send_file(
@@ -304,7 +304,7 @@ def download_lab_report_pdf():
     data, meta = build_lab_report_data(subject_code, semester_id, academic_year, division=division, batch=batch)
     if not data:
         flash("No lab report data found.", "error")
-        return redirect(url_for("lab.lab_marks_page", semester_id=semester_id, subject_code=subject_code))
+        return redirect(url_for("lab.lab_marks_page", semester_id=semester_id, subject_code=subject_code, division=division, batch=batch))
 
     buf, filename = generate_lab_pdf_report(meta, data)
     return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=filename)

@@ -41,7 +41,7 @@ def get_grade(total_marks: float):
     for low, high, grade, gp in GRADE_TABLE:
         if low <= total <= high:
             return grade, gp
-    return "EF", Decimal("0.0")
+    return "FF", Decimal("0.0")
 
 
 # ── SUBJECT / ENROLLMENT FILTERS ─────────────────────────────────────────────
@@ -127,13 +127,13 @@ def compute_final_result(internal_marks: float, external_marks: float, credits: 
     if not ese_pass:
         result["is_passed"]   = False
         result["fail_reason"] = f"ESE below minimum (got {external}/60, need ≥20)"
-        result["grade"]       = "EF"
+        result["grade"]       = "FF"
         result["grade_point"] = Decimal("0.0")
         result["credits_earned"] = 0
     elif not total_pass:
         result["is_passed"]   = False
         result["fail_reason"] = f"Total below 40 (got {total}/100)"
-        result["grade"]       = "EF"
+        result["grade"]       = "FF"
         result["grade_point"] = Decimal("0.0")
         result["credits_earned"] = 0
     else:
@@ -196,7 +196,7 @@ def compute_lab_result(ca1_marks: float, ca2_marks: float, external_marks: float
     result["total"] = round(total, 1)
 
     if total < 40.0:
-        result["grade"] = "EF"
+        result["grade"] = "FF"
         result["grade_point"] = Decimal("0.0")
         result["is_passed"] = False
         result["credits_earned"] = 0
@@ -353,6 +353,10 @@ def update_sgpa_cgpa_for_student(prn, semester_id, academic_year, db, models, co
                 academic_year=academic_year,
             ).first()
 
+            if tm_row is not None:
+                # Refresh internal_total using the current internal formula before SGPA/CGPA.
+                update_internal_totals(tm_row)
+
             ext_val = None
             if tm_row and tm_row.external is not None:
                 ext_val = float(tm_row.external)
@@ -372,6 +376,13 @@ def update_sgpa_cgpa_for_student(prn, semester_id, academic_year, db, models, co
                 if res["is_passed"] is None:
                     has_missing_marks = True
                 else:
+                    # Keep the marks row itself in sync when recalculating SGPA/CGPA.
+                    # This is important after formula changes and one-time refresh scripts.
+                    tm_row.external = round(ext_val, 2)
+                    tm_row.total_marks = res["total"]
+                    tm_row.grade = res["grade"]
+                    tm_row.grade_point = res["grade_point"]
+                    tm_row.is_passed = res["is_passed"]
                     subject_results.append(res)
         else:
             # LAB, PROJECT, etc.
@@ -402,7 +413,7 @@ def update_sgpa_cgpa_for_student(prn, semester_id, academic_year, db, models, co
                 elif lm_row.internal is not None:
                     total = float(lm_row.internal) + float(lm_row.external)
                     if lm_row.grade_point is None or lm_row.total_marks is None:
-                        grade, gp = get_grade(total) if total >= 40 else ("EF", Decimal("0.0"))
+                        grade, gp = get_grade(total) if total >= 40 else ("FF", Decimal("0.0"))
                         lm_row.total_marks = round(total, 2)
                         lm_row.grade = grade
                         lm_row.grade_point = gp
@@ -561,21 +572,22 @@ def is_theory_internal_complete(row):
 
 def update_internal_totals(row):
     """
-    DBATU internal formula for THEORY subjects.
+    Internal formula for THEORY subjects.
 
     CT1        = /10
     CT2        = /10
     Assignment = /10
     MSE/Midsem = /20
 
-    CA1 = highest score among CT1, CT2, Assignment
-    CA2 = second-highest score among CT1, CT2, Assignment
-    Internal Total = CA1 + CA2 + MSE  (/40)
+    CA1 = highest mark from CT1, CT2, Assignment
+    CA2 = highest mark from the remaining two components
+    CA  = CA1 + CA2                 (/20)
+    Internal Total = CA + MSE       (/40)
 
-    Existing DB columns are reused:
-      best_ct        -> CA1
+    Existing DB columns are reused without changing the database schema:
+      best_ct        -> CA1 / highest component
       ca_marks       -> CA1 + CA2
-      internal_total -> CA1 + CA2 + MSE
+      internal_total -> ca_marks + MSE
     """
     if row is None:
         return row
@@ -593,14 +605,12 @@ def update_internal_totals(row):
     assignment = float(row.assignment)
     midsem = float(row.midsem)
 
-    scores = sorted([ct1, ct2, assignment], reverse=True)
-
-    ca1 = scores[0]
-    ca2 = scores[1]
+    ca1, ca2 = sorted([ct1, ct2, assignment], reverse=True)[:2]
+    ca_marks = ca1 + ca2
 
     row.best_ct = round(ca1, 2)
-    row.ca_marks = round(ca1 + ca2, 2)
-    row.internal_total = round(ca1 + ca2 + midsem, 2)
+    row.ca_marks = round(ca_marks, 2)
+    row.internal_total = round(ca_marks + midsem, 2)
 
     return row
 

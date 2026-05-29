@@ -612,6 +612,33 @@
         }
     }
 
+    async function refreshSubjectOptions(sem, ay) {
+        const subjectSelect = document.getElementById('subSelect');
+        if (!subjectSelect) return;
+
+        subjectSelect.innerHTML = '<option value="">Loading semester subjects...</option>';
+
+        try {
+            const payload = await fetchJson(`/api/analytics/subjects/${encodeURIComponent(sem)}?academic_year=${encodeURIComponent(ay)}`);
+            const subjects = payload.subjects || [];
+            subjectSelect.innerHTML = '<option value="">Select subject...</option>';
+
+            if (subjects.length === 0) {
+                subjectSelect.innerHTML = '<option value="">No subjects found for this semester</option>';
+                return;
+            }
+
+            subjects.forEach(sub => {
+                const opt = document.createElement('option');
+                opt.value = sub.subject_code;
+                opt.textContent = `Sem ${sub.semester_id} — ${sub.subject_code} — ${sub.subject_name}`;
+                subjectSelect.appendChild(opt);
+            });
+        } catch (err) {
+            subjectSelect.innerHTML = '<option value="">Could not load semester subjects</option>';
+        }
+    }
+
     async function fetchSemesterData() {
         const value = document.getElementById('semSelect').value;
         if (!value) return;
@@ -620,6 +647,7 @@
         try {
             setEmpty('Loading semester backlog data...');
             await fetchVisualAnalytics(sem, ay);
+            await refreshSubjectOptions(sem, ay);
             const payload = await fetchJson(`/api/analytics/semester/${encodeURIComponent(sem)}?academic_year=${encodeURIComponent(ay)}`);
             renderFailureRows(payload.rows || payload.data || [], `Backlogs for Semester ${sem} — ${ay}`);
         } catch (err) {

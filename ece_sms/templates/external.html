@@ -175,6 +175,8 @@
                     <input type="hidden" name="subject_code" value="{{ selected_subject_code }}">
                     <input type="hidden" name="semester_id" value="{{ selected_sem_id }}">
                     <input type="hidden" name="academic_year" value="{{ academic_year }}">
+                    <input type="hidden" name="division" value="{{ selected_division }}">
+                    <input type="hidden" name="batch" value="{{ selected_batch }}">
 
                     <div class="form-group" style="margin-bottom:16px;">
                         <label class="form-label">Select Completed Excel File (.xlsx)</label>
@@ -217,7 +219,7 @@
                         class="btn btn-report-pdf">
                         Download External Report PDF
                     </a>
-                    <a href="{{ url_for('external.download_sgpa_cgpa_excel', semester_id=selected_sem_id, academic_year=academic_year) }}"
+                    <a href="{{ url_for('external.download_sgpa_cgpa_excel', semester_id=selected_sem_id, academic_year=academic_year, division=selected_division, batch=selected_batch) }}"
                         class="btn btn-secondary">
                         Download SGPA / CGPA Report
                     </a>

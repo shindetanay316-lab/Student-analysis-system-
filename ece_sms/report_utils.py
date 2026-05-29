@@ -1,4 +1,5 @@
 from models import db, Student, Subject, TheoryMarks, Enrollment
+from batch_utils import clean_filter, apply_student_batch_filters, batch_label
 
 
 def _safe_float(value, default=0.0):
@@ -12,30 +13,33 @@ def _safe_float(value, default=0.0):
 
 def _calculate_internal_components(ct1, ct2, assignment, mse):
     """
-    DBATU internal formula:
-      CA1 = best score among CT1, CT2, Assignment
-      CA2 = second-best score among CT1, CT2, Assignment
-      Internal = CA1 + CA2 + MSE
+    Theory internal formula:
+      CA1      = highest of CT1, CT2, Assignment
+      CA2      = highest of the remaining two components
+      CA       = CA1 + CA2
+      Internal = CA + MSE
     """
-    scores = sorted(
-        [_safe_float(ct1), _safe_float(ct2), _safe_float(assignment)],
-        reverse=True
-    )
-    ca1 = scores[0]
-    ca2 = scores[1]
+    components = sorted([
+        _safe_float(ct1),
+        _safe_float(ct2),
+        _safe_float(assignment),
+    ], reverse=True)
+
+    ca1 = components[0]
+    ca2 = components[1]
     ca_total = ca1 + ca2
     internal = ca_total + _safe_float(mse)
 
     return ca1, ca2, ca_total, internal
 
 
-def build_internal_data(subject_code, semester_id, academic_year):
+def build_internal_data(subject_code, semester_id, academic_year, division="", batch=""):
     """
     Builds internal marks report data for one subject.
 
-    Uses the corrected formula:
+    Uses the theory internal formula:
       CA1 = highest of CT1, CT2, Assignment
-      CA2 = second highest of CT1, CT2, Assignment
+      CA2 = highest of the remaining two components
       Internal Total = CA1 + CA2 + MSE
     """
     subj = Subject.query.get(subject_code)
@@ -47,7 +51,7 @@ def build_internal_data(subject_code, semester_id, academic_year):
             "academic_year": academic_year,
         }
 
-    students = (
+    students_query = (
         db.session.query(Student)
         .join(Enrollment, Enrollment.prn == Student.prn)
         .filter(
@@ -55,9 +59,9 @@ def build_internal_data(subject_code, semester_id, academic_year):
             Enrollment.semester_id == semester_id,
             Enrollment.academic_year == academic_year,
         )
-        .order_by(Student.prn)
-        .all()
     )
+    students_query = apply_student_batch_filters(students_query, Student, division, batch)
+    students = students_query.order_by(Student.prn).all()
 
     marks = TheoryMarks.query.filter_by(
         subject_code=subject_code,
@@ -95,9 +99,9 @@ def build_internal_data(subject_code, semester_id, academic_year):
             "mse": mse,
             "internal": internal,
 
-            # Backward-compatible aliases for old Excel/PDF code.
-            # We will update the visible headers in excel_utils.py and pdf_utils.py next.
+            # Backward-compatible aliases for older Excel/PDF code/database naming.
             "best_ct": ca1,
+            "assignment_component": ca2,
             "ca": ca_total,
             "midsem": mse,
         })
@@ -107,6 +111,9 @@ def build_internal_data(subject_code, semester_id, academic_year):
         "subject_name": subj.subject_name,
         "semester_id": semester_id,
         "academic_year": academic_year,
+        "division": clean_filter(division),
+        "batch": clean_filter(batch),
+        "batch_label": batch_label(division, batch),
     }
 
     return data, meta

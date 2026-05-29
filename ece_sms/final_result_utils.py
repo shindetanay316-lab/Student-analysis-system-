@@ -6,6 +6,7 @@ from openpyxl.drawing.image import Image
 from sqlalchemy import or_
 
 from models import db, Student, Subject, Enrollment, TheoryMarks, LabMarks, ExternalMarks
+from batch_utils import clean_filter, batch_label
 from calculations import compute_final_result, compute_lab_result, get_grade, update_internal_totals, is_theory_internal_complete, is_gradable_subject
 
 
@@ -81,7 +82,7 @@ def calculate_grade(total_marks, external_marks=None):
             credits=0
         )
         return {
-            "grade": result["grade"] or "EF",
+            "grade": result["grade"] or "FF",
             "grade_point": float(result["grade_point"] or 0),
             "is_passed": bool(result["is_passed"])
         }
@@ -89,7 +90,7 @@ def calculate_grade(total_marks, external_marks=None):
     # Used only for LAB/PROJECT totals where no separate ESE minimum is applied.
     if total < 40:
         return {
-            "grade": "EF",
+            "grade": "FF",
             "grade_point": 0.0,
             "is_passed": False
         }
@@ -122,7 +123,7 @@ def recalculate_theory_result(mark_row):
     if mark_row is None:
         return None
 
-    # Keep internal fields consistent with the confirmed CA1 + CA2 + MSE formula.
+    # Keep internal fields consistent with the confirmed best-2-of-3 CA formula.
     update_internal_totals(mark_row)
 
     # Final result should remain PENDING until every internal component and
@@ -209,7 +210,7 @@ def recalculate_lab_result(lab_row):
     lab_row.total_marks = round(total, 2)
 
     if total < 40:
-        lab_row.grade = "EF"
+        lab_row.grade = "FF"
         lab_row.grade_point = 0.0
         lab_row.is_passed = False
     else:
@@ -414,8 +415,11 @@ def build_student_semester_result(prn, semester_id, academic_year):
 # -------------------------------------------------
 # Build semester result for all students
 # -------------------------------------------------
-def build_semester_result(semester_id, academic_year):
-    students = (
+def build_semester_result(semester_id, academic_year, division="", batch=""):
+    division = clean_filter(division)
+    batch = clean_filter(batch)
+
+    students_query = (
         db.session.query(Student)
         .join(Enrollment, Enrollment.prn == Student.prn)
         .join(Subject, Enrollment.subject_code == Subject.subject_code)
@@ -429,9 +433,14 @@ def build_semester_result(semester_id, academic_year):
             or_(Subject.is_elective == False, Subject.parent_subject_code.isnot(None))
         )
         .distinct()
-        .order_by(Student.prn)
-        .all()
     )
+
+    if division:
+        students_query = students_query.filter(Student.division == division)
+    if batch:
+        students_query = students_query.filter(Student.batch == batch)
+
+    students = students_query.order_by(Student.prn).all()
 
     result_rows = []
 
@@ -509,8 +518,8 @@ def calculate_cgpa_for_student(prn, upto_semester_id=None):
 # -------------------------------------------------
 # Build SGPA + CGPA report
 # -------------------------------------------------
-def build_sgpa_cgpa_report(semester_id, academic_year):
-    semester_rows = build_semester_result(semester_id, academic_year)
+def build_sgpa_cgpa_report(semester_id, academic_year, division="", batch=""):
+    semester_rows = build_semester_result(semester_id, academic_year, division=division, batch=batch)
 
     final_rows = []
 
@@ -539,8 +548,11 @@ def build_sgpa_cgpa_report(semester_id, academic_year):
 # -------------------------------------------------
 # Generate SGPA/CGPA Excel report
 # -------------------------------------------------
-def generate_sgpa_cgpa_excel_report(semester_id, academic_year):
-    rows = build_sgpa_cgpa_report(semester_id, academic_year)
+def generate_sgpa_cgpa_excel_report(semester_id, academic_year, division="", batch=""):
+    division = clean_filter(division)
+    batch = clean_filter(batch)
+    rows = build_sgpa_cgpa_report(semester_id, academic_year, division=division, batch=batch)
+    report_filter_label = batch_label(division, batch)
 
     wb = Workbook()
     ws = wb.active
@@ -597,7 +609,7 @@ def generate_sgpa_cgpa_excel_report(semester_id, academic_year):
 
     ws.merge_cells("A7:I7")
     sub = ws["A7"]
-    sub.value = f"Semester: {semester_id}     Academic Year: {academic_year}"
+    sub.value = f"Semester: {semester_id}     Academic Year: {academic_year}     Filter: {report_filter_label}"
     sub.font = _body_font(bold=True)
     sub.alignment = _center()
     sub.border = _thin_border()
@@ -664,7 +676,8 @@ def generate_sgpa_cgpa_excel_report(semester_id, academic_year):
     wb.save(output)
     output.seek(0)
 
-    filename = f"SGPA_CGPA_Report_Sem_{semester_id}_{academic_year}.xlsx"
+    filter_suffix = "" if report_filter_label == "All Students" else "_" + report_filter_label.replace(" ", "_").replace("|", "")
+    filename = f"SGPA_CGPA_Report_Sem_{semester_id}_{academic_year}{filter_suffix}.xlsx"
     filename = filename.replace("/", "-")
 
     return output, filename

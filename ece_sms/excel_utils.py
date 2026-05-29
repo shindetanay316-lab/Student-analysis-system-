@@ -583,10 +583,11 @@ def generate_internal_excel(meta, data):
     """
     Internal marks Excel report with common college/logo header.
 
-    Corrected visible formula:
+    Visible formula:
       CA1 = highest of CT1, CT2, Assignment
-      CA2 = second-highest of CT1, CT2, Assignment
-      Internal (/40) = CA1 + CA2 + MSE
+      CA2 = highest of the remaining two components
+      CA (/20) = CA1 + CA2
+      Internal (/40) = CA + MSE
     """
     from openpyxl.drawing.image import Image
 
@@ -594,7 +595,7 @@ def generate_internal_excel(meta, data):
     ws = wb.active
     ws.title = "Internal Marks"
 
-    last_col = 10
+    last_col = 11
     last_letter = get_column_letter(last_col)
 
     ws.column_dimensions['A'].width = 8
@@ -668,7 +669,7 @@ def generate_internal_excel(meta, data):
     ws['E4'].border = _thin_border()
 
     ws.merge_cells(f'G4:{last_letter}4')
-    ws['G4'] = meta['academic_year']
+    ws['G4'] = meta['academic_year'] + (' | ' + meta.get('batch_label', 'All Students') if meta.get('batch_label') else '')
     ws['G4'].border = _thin_border()
 
     for r in range(3, 5):
@@ -681,7 +682,7 @@ def generate_internal_excel(meta, data):
     headers = [
         'SR', 'PRN', 'NAME',
         'CT1', 'CT2', 'ASSIGNMENT',
-        'CA1', 'CA2', 'MSE', 'INTERNAL (/40)'
+        'CA1', 'CA2', 'CA (/20)', 'MSE', 'INTERNAL (/40)'
     ]
 
     for col, hdr in enumerate(headers, 1):
@@ -701,7 +702,8 @@ def generate_internal_excel(meta, data):
             d.get('ct2'),
             d.get('assignment'),
             d.get('ca1', d.get('best_ct')),
-            d.get('ca2', 0),
+            d.get('ca2', d.get('assignment_component')),
+            d.get('ca_total', d.get('ca')),
             d.get('mse', d.get('midsem')),
             d.get('internal')
         ]

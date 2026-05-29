@@ -426,6 +426,8 @@ def upload_ct1():
     subject_code  = request.form.get('subject_code', '').strip()
     exam_type     = clean_exam_type(request.form.get('exam_type', 'CT1'), VALID_EXAM_TYPES)
     semester_id   = request.form.get('semester_id', type=int)
+    division      = clean_filter(request.form.get('division', ''))
+    batch         = clean_filter(request.form.get('batch', ''))
     academic_year = _academic_year_for_semester(semester_id)
     max_marks     = EXAM_MAX_MARKS.get(exam_type, 10)
 
@@ -443,7 +445,9 @@ def upload_ct1():
             'ct1_page',
             semester_id   = semester_id,
             exam_type     = exam_type,
-            subject_code  = subject_code
+            subject_code  = subject_code,
+            division      = division,
+            batch         = batch
         ))
 
     file = request.files.get('ct1_file')
@@ -453,7 +457,9 @@ def upload_ct1():
             'ct1_page',
             semester_id  = semester_id,
             exam_type    = exam_type,
-            subject_code = subject_code
+            subject_code = subject_code,
+            division     = division,
+            batch        = batch
         ))
 
     if not file.filename.endswith('.xlsx'):
@@ -462,7 +468,9 @@ def upload_ct1():
             'ct1_page',
             semester_id  = semester_id,
             exam_type    = exam_type,
-            subject_code = subject_code
+            subject_code = subject_code,
+            division     = division,
+            batch        = batch
         ))
 
     success, errors, count = parse_ct1_upload(
@@ -481,7 +489,9 @@ def upload_ct1():
             'ct1_page',
             semester_id  = semester_id,
             exam_type    = exam_type,
-            subject_code = subject_code
+            subject_code = subject_code,
+            division     = division,
+            batch        = batch
         ))
 
     flash(
@@ -493,7 +503,9 @@ def upload_ct1():
         'ct1_page',
         semester_id  = semester_id,
         exam_type    = exam_type,
-        subject_code = subject_code
+        subject_code = subject_code,
+        division     = division,
+        batch        = batch
     ))
 
 @app.route('/download-ct1-report/<fmt>')
@@ -743,6 +755,8 @@ def download_internal_report(fmt):
 
     subject_code = request.args.get('subject_code', '').strip()
     semester_id = request.args.get('semester_id', type=int)
+    division = clean_filter(request.args.get('division', ''))
+    batch = clean_filter(request.args.get('batch', ''))
 
     if not subject_code:
         flash('Please select subject.', 'error')
@@ -752,7 +766,9 @@ def download_internal_report(fmt):
     data, meta = build_internal_data(
         subject_code,
         semester_id,
-        academic_year
+        academic_year,
+        division=division,
+        batch=batch,
     )
 
     if fmt == 'excel':

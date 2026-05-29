@@ -18,7 +18,7 @@ from calculations import is_gradable_subject
 
 analytics_bp = Blueprint("analytics", __name__, url_prefix="")
 
-FAIL_GRADES = {"EF", "FF", "F"}
+FAIL_GRADES = {"FF", "EF", "F"}  # FF is official; EF/F kept only for old DB rows
 
 
 # -----------------------------------------------------------------------------
@@ -76,7 +76,7 @@ def _result_payload(row, subject, student, semester_id=None, academic_year=None)
 def _failure_condition(model):
     return or_(
         model.is_passed.is_(False),
-        model.grade.in_(["EF", "FF", "F"]),
+        model.grade.in_(list(FAIL_GRADES)),
     )
 
 
@@ -112,6 +112,48 @@ def analytics_page():
         subjects=subjects,
         students=students,
     )
+
+
+@analytics_bp.route("/api/analytics/subjects/<int:sem>")
+@login_required
+def get_analytics_subjects_for_semester(sem):
+    """Return only gradable subjects for the selected semester.
+
+    This keeps the Subject Failures dropdown and the analytics view aligned: when
+    Semester 5 is selected, only Semester 5 subjects are shown.
+    """
+    academic_year = request.args.get("academic_year", "").strip()
+    if not academic_year:
+        academic_year = get_academic_year_for_semester(sem)
+
+    subjects = (
+        db.session.query(Subject)
+        .join(Enrollment, Enrollment.subject_code == Subject.subject_code)
+        .filter(
+            Enrollment.semester_id == sem,
+            Enrollment.academic_year == academic_year,
+            Subject.semester_id == sem,
+            _gradable_subject_filter(),
+        )
+        .distinct()
+        .order_by(Subject.subject_code)
+        .all()
+    )
+
+    return jsonify({
+        "semester_id": sem,
+        "academic_year": academic_year,
+        "subjects": [
+            {
+                "subject_code": sub.subject_code,
+                "subject_name": sub.subject_name,
+                "semester_id": sub.semester_id,
+                "subject_type": sub.subject_type,
+                "credits": int(sub.credits or 0),
+            }
+            for sub in subjects
+        ],
+    })
 
 
 # -----------------------------------------------------------------------------

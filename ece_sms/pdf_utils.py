@@ -403,7 +403,7 @@ def _fmt_mark(v):
 # ══════════════════════════════════════════════════════════════
 def generate_internal_pdf(meta, data):
     """
-    Internal marks PDF report with common logo header and corrected CA1/CA2/MSE columns.
+    Internal marks PDF report with common logo header and best-2-of-3 CA formula.
     """
     buf = io.BytesIO()
 
@@ -476,7 +476,7 @@ def generate_internal_pdf(meta, data):
         ],
         [
             Paragraph("Academic Year :", s_label), Paragraph(meta['academic_year'], s_value),
-            Paragraph("Formula :", s_label), Paragraph("CA1 + CA2 + MSE", s_value),
+            Paragraph("Formula :", s_label), Paragraph("Best 2 of CT1/CT2/Assignment + MSE", s_value),
             Paragraph("Max Marks :", s_label), Paragraph("40", s_value),
         ],
     ]
@@ -492,20 +492,21 @@ def generate_internal_pdf(meta, data):
     # ── Marks Table ──────────────────────────────────────────
     headers = [
         "SR", "PRN", "NAME", "CT1", "CT2", "ASSIGNMENT",
-        "CA1", "CA2", "MSE", "INTERNAL (/40)"
+        "CA1", "CA2", "CA (/20)", "MSE", "INTERNAL (/40)"
     ]
     col_headers = [Paragraph(h, s_th) for h in headers]
     col_widths = [
         page_width * 0.05,
-        page_width * 0.12,
+        page_width * 0.11,
         page_width * 0.18,
+        page_width * 0.065,
+        page_width * 0.065,
+        page_width * 0.09,
         page_width * 0.07,
         page_width * 0.07,
-        page_width * 0.10,
         page_width * 0.07,
         page_width * 0.07,
-        page_width * 0.08,
-        page_width * 0.19,
+        page_width * 0.15,
     ]
 
     table_data = [col_headers]
@@ -518,7 +519,8 @@ def generate_internal_pdf(meta, data):
             Paragraph(_fmt_mark(d.get('ct2')), s_td),
             Paragraph(_fmt_mark(d.get('assignment')), s_td),
             Paragraph(_fmt_mark(d.get('ca1', d.get('best_ct'))), s_td),
-            Paragraph(_fmt_mark(d.get('ca2', 0)), s_td),
+            Paragraph(_fmt_mark(d.get('ca2', d.get('assignment_component'))), s_td),
+            Paragraph(_fmt_mark(d.get('ca_total', d.get('ca'))), s_td),
             Paragraph(_fmt_mark(d.get('mse', d.get('midsem'))), s_td),
             Paragraph(_fmt_mark(d.get('internal')), s_td),
         ])
