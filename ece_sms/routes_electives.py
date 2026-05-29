@@ -203,6 +203,15 @@ def save_elective_assignment():
     option_subjects = _option_subjects_query(semester_id, elective_group).all()
     option_codes = [s.subject_code for s in option_subjects]
 
+    # Include parent placeholder row in cleanup. Older/manual data may have
+    # enrollments like BTECHM505 instead of BTECHM505B. Those parent rows must
+    # be removed when a real option is assigned, otherwise SGPA/CGPA becomes
+    # PENDING for that student.
+    parent_code = selected_subject.parent_subject_code
+    cleanup_codes = list(option_codes)
+    if parent_code and parent_code not in cleanup_codes:
+        cleanup_codes.append(parent_code)
+
     if subject_code not in option_codes:
         flash("Selected subject does not belong to the selected elective group.", "error")
         return redirect(url_for(
@@ -234,7 +243,7 @@ def save_elective_assignment():
                 Enrollment.prn.in_(selected_prns),
                 Enrollment.semester_id == semester_id,
                 Enrollment.academic_year == academic_year,
-                Enrollment.subject_code.in_(option_codes),
+                Enrollment.subject_code.in_(cleanup_codes),
             )
             .delete(synchronize_session=False)
         )

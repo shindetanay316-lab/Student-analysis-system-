@@ -28,7 +28,7 @@ GRADE_TABLE = [
     (56,  60, "DD", Decimal("6.0")),
     (51,  55, "DE", Decimal("5.5")),
     (40,  50, "EE", Decimal("5.0")),
-    ( 0,  39, "EF", Decimal("0.0")),   # FAIL
+    ( 0,  39, "FF", Decimal("0.0")),   # FAIL
 ]
 
 
@@ -42,6 +42,42 @@ def get_grade(total_marks: float):
         if low <= total <= high:
             return grade, gp
     return "EF", Decimal("0.0")
+
+
+# ── SUBJECT / ENROLLMENT FILTERS ─────────────────────────────────────────────
+
+def is_gradable_subject(subject):
+    """Return True only for subjects that should affect result / SGPA / CGPA.
+
+    Important for electives:
+    - Parent rows like BTECHM505 / BTECPE503 / BTECOE504 are only containers.
+      They should NEVER be counted in SGPA/CGPA and should never make a result
+      pending. Only option rows whose parent_subject_code is filled are counted.
+    - Audit / attendance-only / inactive subjects are also ignored.
+    """
+    if subject is None:
+        return False
+
+    if bool(getattr(subject, "is_audit", False)):
+        return False
+
+    if bool(getattr(subject, "is_attendance_only", False)):
+        return False
+
+    if getattr(subject, "is_active", True) is False:
+        return False
+
+    try:
+        if int(getattr(subject, "credits", 0) or 0) <= 0:
+            return False
+    except (TypeError, ValueError):
+        return False
+
+    # Elective parent rows are placeholders/containers, not actual subjects.
+    if bool(getattr(subject, "is_elective", False)) and not getattr(subject, "parent_subject_code", None):
+        return False
+
+    return True
 
 
 # ── FINAL RESULT COMPUTATION ──────────────────────────────────────────────────
@@ -297,10 +333,10 @@ def update_sgpa_cgpa_for_student(prn, semester_id, academic_year, db, models, co
 
     for enr in enrollments:
         subj = models.Subject.query.filter_by(subject_code=enr.subject_code).first()
-        if subj is None or subj.is_audit:
-            continue  # skip audit subjects
+        if not is_gradable_subject(subj):
+            continue  # skip audit / inactive / attendance-only / elective parent rows
 
-        total_non_audit_credits += subj.credits
+        total_non_audit_credits += int(subj.credits or 0)
 
         if subj.subject_type == 'THEORY':
             tm_row = models.TheoryMarks.query.filter_by(

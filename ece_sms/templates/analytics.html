@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECE SMS — Visual Analytics</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --navy: #1A2B4A;
+            --navy-2: #243B66;
+            --gold: #D4A017;
+            --bg: #F3F6FA;
+            --card: #FFFFFF;
+            --line: #E2E8F0;
+            --muted: #64748B;
+            --danger: #D94A6A;
+            --danger-dark: #B91C1C;
+            --danger-bg: #FEE2E2;
+            --success: #169B62;
+            --success-bg: #DCFCE7;
+            --pending: #B7791F;
+            --pending-bg: #FEF3C7;
+            --indigo: #595DEB;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: #111827;
+            font-family: "Times New Roman", Times, serif;
+        }
+
+        .analytics-shell {
+            min-height: 100vh;
+            padding: 28px;
+        }
+
+        .analytics-topbar {
+            background: linear-gradient(135deg, var(--navy), var(--navy-2));
+            color: white;
+            border-radius: 20px;
+            padding: 22px 26px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18);
+            margin-bottom: 22px;
+        }
+
+        .analytics-topbar h1 {
+            margin: 0;
+            font-size: 30px;
+            letter-spacing: 0.2px;
+        }
+
+        .analytics-topbar p {
+            margin: 6px 0 0;
+            color: #DDE7F5;
+            font-size: 14px;
+        }
+
+        .back-link {
+            background: var(--gold);
+            color: #111827;
+            padding: 10px 14px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 18px;
+            margin-bottom: 22px;
+        }
+
+        .analytics-card,
+        .metric-card,
+        .chart-card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            box-shadow: 0 9px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        .filter-card {
+            padding: 18px;
+            border-top: 4px solid var(--gold);
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            font-size: 13px;
+            color: #334155;
+            margin-bottom: 8px;
+        }
+
+        select {
+            width: 100%;
+            padding: 11px 12px;
+            border: 1px solid #CBD5E1;
+            border-radius: 12px;
+            background: #F8FAFC;
+            color: #0F172A;
+            outline: none;
+            font-size: 14px;
+        }
+
+        select:focus {
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px rgba(212, 160, 23, 0.18);
+        }
+
+        .visual-title-row {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 16px;
+            margin: 8px 0 16px;
+        }
+
+        .visual-title-row h2 {
+            margin: 0;
+            color: #111827;
+            font-size: 26px;
+        }
+
+        .visual-title-row p {
+            margin: 4px 0 0;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 18px;
+            margin-bottom: 22px;
+        }
+
+        .metric-card {
+            position: relative;
+            overflow: hidden;
+            padding: 20px;
+            min-height: 130px;
+        }
+
+        .metric-card.danger {
+            border-color: rgba(217, 74, 106, 0.45);
+            border-bottom: 4px solid var(--danger);
+        }
+
+        .metric-label {
+            color: var(--muted);
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 0.12em;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+
+        .metric-value {
+            font-size: 34px;
+            line-height: 1;
+            font-weight: bold;
+            color: #111827;
+        }
+
+        .metric-sub {
+            margin-top: 12px;
+            color: var(--muted);
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .metric-sub.good { color: var(--success); }
+        .metric-sub.warn { color: var(--pending); }
+        .metric-sub.bad { color: var(--danger); }
+        .metric-sub.linklike { color: #4F46E5; }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 22px;
+            margin-bottom: 22px;
+        }
+
+        .chart-card {
+            padding: 22px;
+            min-height: 380px;
+        }
+
+        .chart-card h3 {
+            margin: 0 0 18px;
+            color: #111827;
+            font-size: 22px;
+        }
+
+        .chart-box {
+            position: relative;
+            height: 310px;
+        }
+
+        .doughnut-box {
+            position: relative;
+            height: 330px;
+        }
+
+        .stats-grid {
+            display: none;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 18px;
+            margin-bottom: 18px;
+        }
+
+        .stats-grid.show { display: grid; }
+
+        .stat-label {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--navy);
+        }
+
+        .stat-small {
+            font-size: 13px;
+            color: #334155;
+            line-height: 1.35;
+        }
+
+        .table-card { padding: 20px; }
+
+        .table-wrap { overflow-x: auto; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th {
+            background: #E8EEF8;
+            color: #10213F;
+            text-align: left;
+            padding: 12px;
+            border: 1px solid #CCD6E5;
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 11px 12px;
+            border: 1px solid #E2E8F0;
+            vertical-align: middle;
+        }
+
+        tr.fail-row td {
+            background: var(--danger-bg);
+            color: var(--danger-dark);
+            font-weight: bold;
+        }
+
+        tr.pending-row td {
+            background: var(--pending-bg);
+            color: var(--pending);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 5px 9px;
+            border-radius: 999px;
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        .badge-fail { background: var(--danger-bg); color: var(--danger-dark); }
+        .badge-pass { background: var(--success-bg); color: var(--success); }
+        .badge-pending { background: var(--pending-bg); color: var(--pending); }
+
+        .empty-state {
+            padding: 22px;
+            color: var(--muted);
+            text-align: center;
+        }
+
+        @media (max-width: 1150px) {
+            .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .charts-grid { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 950px) {
+            .filter-grid,
+            .stats-grid { grid-template-columns: 1fr; }
+            .metric-grid { grid-template-columns: 1fr; }
+            .analytics-topbar { align-items: flex-start; flex-direction: column; }
+            .visual-title-row { align-items: flex-start; flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+<div class="analytics-shell">
+    <header class="analytics-topbar">
+        <div>
+            <h1>Academic Analytics Engine</h1>
+            <p>Visual semester analytics, backlog analysis, subject failures, student history, SGPA/CGPA, and promotion eligibility.</p>
+        </div>
+        <a class="back-link" href="{{ url_for('index') }}">← Back to Dashboard</a>
+    </header>
+
+    <section class="filter-grid">
+        <div class="analytics-card filter-card">
+            <label for="semSelect">Filter 1: Semester Visual Analytics + Backlogs</label>
+            <select id="semSelect" onchange="fetchSemesterData()">
+                <option value="">Select semester...</option>
+                {% for sem_id, ay in semesters %}
+                    <option value="{{ sem_id }}|{{ ay }}">Semester {{ sem_id }} — {{ ay }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="analytics-card filter-card">
+            <label for="subSelect">Filter 2: Subject Failures</label>
+            <select id="subSelect" onchange="fetchSubjectData()">
+                <option value="">Select subject...</option>
+                {% for sub in subjects %}
+                    <option value="{{ sub.subject_code }}">Sem {{ sub.semester_id }} — {{ sub.subject_code }} — {{ sub.subject_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="analytics-card filter-card">
+            <label for="studentSelect">Filter 3: Student History</label>
+            <select id="studentSelect" onchange="fetchStudentData()">
+                <option value="">Select student...</option>
+                {% for student in students %}
+                    <option value="{{ student.prn }}">{{ student.prn }} — {{ student.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </section>
+
+    <section class="visual-title-row">
+        <div>
+            <h2 id="visualTitle">Semester Analytics</h2>
+            <p id="visualSubTitle">Select a semester to load visual dashboard.</p>
+        </div>
+    </section>
+
+    <section class="metric-grid">
+        <div class="metric-card">
+            <div class="metric-label">Top Scorer</div>
+            <div id="metricTopScorer" class="metric-value">--</div>
+            <div id="metricTopScorerName" class="metric-sub linklike">--</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Class Average</div>
+            <div id="metricClassAverage" class="metric-value">--</div>
+            <div class="metric-sub good">Average of completed results</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Lowest Marks</div>
+            <div id="metricLowest" class="metric-value">--</div>
+            <div class="metric-sub warn">Needs attention</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Avg Attendance</div>
+            <div id="metricAttendance" class="metric-value">--</div>
+            <div id="metricAttendanceSub" class="metric-sub good">Attendance records</div>
+        </div>
+        <div class="metric-card danger">
+            <div class="metric-label">Total Backlogs</div>
+            <div id="metricBacklogs" class="metric-value">--</div>
+            <div id="metricBacklogsSub" class="metric-sub bad">Across students</div>
+        </div>
+    </section>
+
+    <section class="charts-grid">
+        <div class="chart-card">
+            <h3>Average Marks by Subject</h3>
+            <div class="chart-box"><canvas id="subjectAverageChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <h3>Grade Distribution</h3>
+            <div class="doughnut-box"><canvas id="gradeDistributionChart"></canvas></div>
+        </div>
+    </section>
+
+    <section id="studentStats" class="stats-grid">
+        <div class="analytics-card filter-card">
+            <div class="stat-label">Total Backlogs</div>
+            <div id="statBacklogs" class="stat-value">0</div>
+        </div>
+        <div class="analytics-card filter-card">
+            <div class="stat-label">Pending Subjects</div>
+            <div id="statPending" class="stat-value">0</div>
+        </div>
+        <div class="analytics-card filter-card">
+            <div class="stat-label">Current CGPA</div>
+            <div id="statCgpa" class="stat-value">PENDING</div>
+        </div>
+        <div class="analytics-card filter-card">
+            <div class="stat-label">Eligibility Status</div>
+            <div id="statEligibility" class="stat-small">--</div>
+        </div>
+    </section>
+
+    <section class="analytics-card table-card">
+        <h2 id="tableTitle" style="margin:0 0 14px;color:#1A2B4A;">Results</h2>
+        <div class="table-wrap">
+            <table>
+                <thead id="tableHead"></thead>
+                <tbody id="tableBody">
+                    <tr><td class="empty-state">Select a filter above to view analytics.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+<script>
+    let subjectAverageChart = null;
+    let gradeDistributionChart = null;
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
+
+    function fmtPercent(value) {
+        if (value === null || value === undefined || value === 'PENDING') return '--';
+        const n = Number(value);
+        if (Number.isNaN(n)) return '--';
+        return `${n.toFixed(n % 1 === 0 ? 0 : 1)}%`;
+    }
+
+    function fmtNumber(value) {
+        if (value === null || value === undefined || value === 'PENDING') return '--';
+        const n = Number(value);
+        if (Number.isNaN(n)) return '--';
+        return `${n.toFixed(n % 1 === 0 ? 0 : 1)}`;
+    }
+
+    function statusBadge(status) {
+        const s = String(status || 'PENDING').toUpperCase();
+        if (s === 'FAIL') return '<span class="badge badge-fail">FAIL</span>';
+        if (s === 'PASS') return '<span class="badge badge-pass">PASS</span>';
+        return '<span class="badge badge-pending">PENDING</span>';
+    }
+
+    function setEmpty(message) {
+        document.getElementById('tableHead').innerHTML = '';
+        document.getElementById('tableBody').innerHTML = `<tr><td class="empty-state">${escapeHtml(message)}</td></tr>`;
+    }
+
+    function hideStudentStats() {
+        document.getElementById('studentStats').classList.remove('show');
+    }
+
+    async function fetchJson(url) {
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Request failed');
+        return data;
+    }
+
+    function destroyCharts() {
+        if (subjectAverageChart) subjectAverageChart.destroy();
+        if (gradeDistributionChart) gradeDistributionChart.destroy();
+    }
+
+    function renderVisualDashboard(payload) {
+        const sem = payload.semester_id;
+        const ay = payload.academic_year;
+        const cards = payload.cards || {};
+        const top = cards.top_scorer || {};
+
+        document.getElementById('visualTitle').innerText = `Semester ${sem} Analytics`;
+        document.getElementById('visualSubTitle').innerText = `Academic Year ${ay} — visual performance summary`;
+
+        document.getElementById('metricTopScorer').innerText = fmtPercent(top.value);
+        document.getElementById('metricTopScorerName').innerText = top.student_name || '--';
+        document.getElementById('metricClassAverage').innerText = fmtPercent(cards.class_average);
+        document.getElementById('metricLowest').innerText = fmtPercent(cards.lowest_marks);
+        document.getElementById('metricAttendance').innerText = fmtPercent(cards.avg_attendance);
+        document.getElementById('metricAttendanceSub').innerText = cards.avg_attendance === null || cards.avg_attendance === undefined
+            ? 'No attendance uploaded yet'
+            : 'Healthy range';
+        document.getElementById('metricBacklogs').innerText = fmtNumber(cards.total_backlogs || 0);
+        document.getElementById('metricBacklogsSub').innerText = `Across ${cards.backlog_students || 0} students`;
+
+        destroyCharts();
+
+        const subjectRows = payload.subject_averages || [];
+        const subjectLabels = subjectRows.map(r => r.subject_code);
+        const subjectValues = subjectRows.map(r => Number(r.average || 0));
+
+        const barCtx = document.getElementById('subjectAverageChart');
+        subjectAverageChart = new Chart(barCtx, {
+            type: 'bar',
+            data: {
+                labels: subjectLabels,
+                datasets: [{
+                    label: 'Average Score (%)',
+                    data: subjectValues,
+                    backgroundColor: '#595DEB',
+                    borderRadius: 7,
+                    maxBarThickness: 80,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: true, labels: { color: '#64748B' } },
+                    tooltip: {
+                        callbacks: {
+                            afterLabel: function(context) {
+                                const row = subjectRows[context.dataIndex];
+                                return row ? row.subject_name : '';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, max: 100, ticks: { color: '#64748B' }, grid: { color: '#E5E7EB' } },
+                    x: { ticks: { color: '#64748B' }, grid: { color: '#EEF2F7' } }
+                }
+            }
+        });
+
+        const dist = payload.grade_distribution || {};
+        const doughnutCtx = document.getElementById('gradeDistributionChart');
+        gradeDistributionChart = new Chart(doughnutCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Grade A (>90)', 'Grade B (75-89)', 'Grade C (60-74)', 'Grade D (40-59)', 'Fail (<40)'],
+                datasets: [{
+                    data: [dist.A || 0, dist.B || 0, dist.C || 0, dist.D || 0, dist.Fail || 0],
+                    backgroundColor: ['#10B981', '#3B82F6', '#F59E0B', '#F97316', '#EF4444'],
+                    borderWidth: 0,
+                    hoverOffset: 8,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '60%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: '#64748B', boxWidth: 22, padding: 14 } }
+                }
+            }
+        });
+    }
+
+    function renderFailureRows(rows, title) {
+        hideStudentStats();
+        document.getElementById('tableTitle').innerText = title;
+        document.getElementById('tableHead').innerHTML = `
+            <tr>
+                <th>PRN</th>
+                <th>Student Name</th>
+                <th>Subject Code</th>
+                <th>Subject</th>
+                <th>Total</th>
+                <th>Grade</th>
+                <th>Status</th>
+            </tr>`;
+
+        if (!rows || rows.length === 0) {
+            document.getElementById('tableBody').innerHTML = '<tr><td colspan="7" class="empty-state">No failed/backlog students found.</td></tr>';
+            return;
+        }
+
+        document.getElementById('tableBody').innerHTML = rows.map(r => `
+            <tr class="fail-row">
+                <td>${escapeHtml(r.prn)}</td>
+                <td>${escapeHtml(r.student_name || r.name)}</td>
+                <td>${escapeHtml(r.subject_code)}</td>
+                <td>${escapeHtml(r.subject_name)}</td>
+                <td>${r.total_marks ?? '-'}</td>
+                <td>${escapeHtml(r.grade)}</td>
+                <td>${statusBadge(r.status)}</td>
+            </tr>`).join('');
+    }
+
+    async function fetchVisualAnalytics(sem, ay) {
+        try {
+            const payload = await fetchJson(`/api/analytics/visual?semester=${encodeURIComponent(sem)}&academic_year=${encodeURIComponent(ay)}`);
+            renderVisualDashboard(payload);
+        } catch (err) {
+            document.getElementById('visualTitle').innerText = 'Semester Analytics';
+            document.getElementById('visualSubTitle').innerText = err.message;
+        }
+    }
+
+    async function fetchSemesterData() {
+        const value = document.getElementById('semSelect').value;
+        if (!value) return;
+        const [sem, ay] = value.split('|');
+
+        try {
+            setEmpty('Loading semester backlog data...');
+            await fetchVisualAnalytics(sem, ay);
+            const payload = await fetchJson(`/api/analytics/semester/${encodeURIComponent(sem)}?academic_year=${encodeURIComponent(ay)}`);
+            renderFailureRows(payload.rows || payload.data || [], `Backlogs for Semester ${sem} — ${ay}`);
+        } catch (err) {
+            setEmpty(err.message);
+        }
+    }
+
+    async function fetchSubjectData() {
+        const code = document.getElementById('subSelect').value;
+        if (!code) return;
+
+        try {
+            setEmpty('Loading subject failure data...');
+            const payload = await fetchJson(`/api/analytics/subject/${encodeURIComponent(code)}`);
+            renderFailureRows(payload.rows || payload.data || [], `Failures in ${payload.subject_code} — ${payload.subject_name}`);
+        } catch (err) {
+            setEmpty(err.message);
+        }
+    }
+
+    async function fetchStudentData() {
+        const prn = document.getElementById('studentSelect').value;
+        if (!prn) return;
+
+        try {
+            setEmpty('Loading student history...');
+            const payload = await fetchJson(`/api/analytics/student/${encodeURIComponent(prn)}`);
+
+            document.getElementById('studentStats').classList.add('show');
+            document.getElementById('statBacklogs').innerText = payload.total_backlogs ?? 0;
+            document.getElementById('statPending').innerText = payload.pending_subjects ?? 0;
+            document.getElementById('statCgpa').innerText = payload.cgpa ?? 'PENDING';
+            document.getElementById('statEligibility').innerText = payload.eligibility || '--';
+
+            const student = payload.student || {};
+            document.getElementById('tableTitle').innerText = `Academic History — ${student.prn || ''} ${student.name || ''}`;
+            document.getElementById('tableHead').innerHTML = `
+                <tr>
+                    <th>Sem</th>
+                    <th>Academic Year</th>
+                    <th>Subject Code</th>
+                    <th>Subject</th>
+                    <th>Credits</th>
+                    <th>Total</th>
+                    <th>Grade</th>
+                    <th>Grade Point</th>
+                    <th>Result</th>
+                </tr>`;
+
+            const rows = payload.history || [];
+            if (rows.length === 0) {
+                document.getElementById('tableBody').innerHTML = '<tr><td colspan="9" class="empty-state">No academic history found.</td></tr>';
+                return;
+            }
+
+            document.getElementById('tableBody').innerHTML = rows.map(r => {
+                const status = String(r.result || 'PENDING').toUpperCase();
+                const rowClass = status === 'FAIL' ? 'fail-row' : (status === 'PENDING' ? 'pending-row' : '');
+                return `<tr class="${rowClass}">
+                    <td>${escapeHtml(r.semester_id || r.sem)}</td>
+                    <td>${escapeHtml(r.academic_year)}</td>
+                    <td>${escapeHtml(r.subject_code)}</td>
+                    <td>${escapeHtml(r.subject_name || r.name)}</td>
+                    <td>${escapeHtml(r.credits)}</td>
+                    <td>${r.total_marks ?? '-'}</td>
+                    <td>${escapeHtml(r.grade)}</td>
+                    <td>${r.grade_point ?? '-'}</td>
+                    <td>${statusBadge(status)}</td>
+                </tr>`;
+            }).join('');
+        } catch (err) {
+            setEmpty(err.message);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const semSelect = document.getElementById('semSelect');
+        if (semSelect.options.length > 1) {
+            semSelect.selectedIndex = semSelect.options.length - 1;
+            fetchSemesterData();
+        }
+    });
+</script>
+</body>
+</html>

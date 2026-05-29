@@ -3,9 +3,10 @@ import os
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.drawing.image import Image
+from sqlalchemy import or_
 
 from models import db, Student, Subject, Enrollment, TheoryMarks, LabMarks, ExternalMarks
-from calculations import compute_final_result, compute_lab_result, get_grade, update_internal_totals, is_theory_internal_complete
+from calculations import compute_final_result, compute_lab_result, get_grade, update_internal_totals, is_theory_internal_complete, is_gradable_subject
 
 
 TNR = "Times New Roman"
@@ -260,7 +261,11 @@ def build_student_semester_result(prn, semester_id, academic_year):
             Enrollment.prn == prn,
             Enrollment.semester_id == semester_id,
             Enrollment.academic_year == academic_year,
-            Subject.is_audit == False
+            Subject.is_audit == False,
+            Subject.is_active == True,
+            Subject.is_attendance_only == False,
+            # Elective parent rows are placeholders only. Count selected options only.
+            or_(Subject.is_elective == False, Subject.parent_subject_code.isnot(None))
         )
         .order_by(Subject.subject_code)
         .all()
@@ -274,6 +279,9 @@ def build_student_semester_result(prn, semester_id, academic_year):
     has_failed = False
 
     for enrollment, subject in enrolled_subjects:
+        if not is_gradable_subject(subject):
+            continue
+
         credits = int(subject.credits or 0)
         total_credits += credits
 
@@ -410,9 +418,15 @@ def build_semester_result(semester_id, academic_year):
     students = (
         db.session.query(Student)
         .join(Enrollment, Enrollment.prn == Student.prn)
+        .join(Subject, Enrollment.subject_code == Subject.subject_code)
         .filter(
             Enrollment.semester_id == semester_id,
-            Enrollment.academic_year == academic_year
+            Enrollment.academic_year == academic_year,
+            Subject.is_audit == False,
+            Subject.is_active == True,
+            Subject.is_attendance_only == False,
+            # Do not pull students only because of an invalid elective parent enrollment.
+            or_(Subject.is_elective == False, Subject.parent_subject_code.isnot(None))
         )
         .distinct()
         .order_by(Student.prn)
@@ -451,7 +465,15 @@ def calculate_cgpa_for_student(prn, upto_semester_id=None):
     """
     sem_query = (
         db.session.query(Enrollment.semester_id, Enrollment.academic_year)
-        .filter(Enrollment.prn == prn)
+        .join(Subject, Enrollment.subject_code == Subject.subject_code)
+        .filter(
+            Enrollment.prn == prn,
+            Subject.is_audit == False,
+            Subject.is_active == True,
+            Subject.is_attendance_only == False,
+            # Elective parent rows are placeholders and must not create CGPA dependencies.
+            or_(Subject.is_elective == False, Subject.parent_subject_code.isnot(None))
+        )
         .distinct()
         .order_by(Enrollment.semester_id)
     )

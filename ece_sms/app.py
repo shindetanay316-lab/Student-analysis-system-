@@ -57,6 +57,9 @@ def create_app():
     from routes_attendance import attendance_bp
     app.register_blueprint(attendance_bp)
 
+    from routes_analytics import analytics_bp
+    app.register_blueprint(analytics_bp)
+
     return app
 
 # ══════════════════════════════════════════════
