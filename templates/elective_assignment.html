@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elective Assignment — ECE SMS</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ct1.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sms-theme.css') }}">
+    <style>
+        .mini-note {
+            font-size: 12.5px;
+            color: #4A5568;
+            line-height: 1.7;
+            background: #F7F9FB;
+            border: 1px solid #D0D5DD;
+            border-left: 4px solid #1A2B4A;
+            padding: 12px 14px;
+            margin-bottom: 16px;
+        }
+        .option-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+        }
+        .option-card {
+            display: block;
+            text-decoration: none;
+            border: 1px solid #D0D5DD;
+            border-radius: 4px;
+            background: #FFFFFF;
+            padding: 12px 14px;
+            color: #1A2B4A;
+            transition: 0.15s;
+        }
+        .option-card:hover,
+        .option-card.active {
+            border-color: #1A2B4A;
+            background: #EEF3FB;
+            box-shadow: 0 2px 8px rgba(26, 43, 74, 0.14);
+        }
+        .option-code {
+            font-size: 13px;
+            font-weight: bold;
+            color: #1A2B4A;
+        }
+        .option-name {
+            font-size: 12.5px;
+            color: #4A5568;
+            line-height: 1.55;
+            margin-top: 4px;
+        }
+        .option-meta {
+            margin-top: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .table-wrap {
+            overflow-x: auto;
+            border: 1px solid #D0D5DD;
+            border-radius: 4px;
+        }
+        .student-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #FFFFFF;
+        }
+        .student-table th,
+        .student-table td {
+            border-bottom: 1px solid #E2E8F0;
+            padding: 9px 10px;
+            font-size: 13px;
+            text-align: left;
+        }
+        .student-table th {
+            background: #1A2B4A;
+            color: #FFFFFF;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+        .student-table tr:last-child td {
+            border-bottom: none;
+        }
+        .student-table tr:hover td {
+            background: #F7F9FB;
+        }
+        .mono {
+            font-family: Consolas, "Courier New", monospace;
+            font-weight: bold;
+        }
+        .choice-pill {
+            display: inline-block;
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            background: #EEF3FB;
+            color: #1A2B4A;
+            border: 1px solid #C4D0E4;
+            font-weight: bold;
+        }
+        .choice-pill.current {
+            background: #EEF7EE;
+            color: #1B4D1E;
+            border-color: #8BC48C;
+        }
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .small-btn {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="nav-brand-text">
+                <div class="nav-title">ECE Student Management System</div>
+                <div class="nav-sub">Elective Assignment Panel</div>
+            </div>
+        </div>
+        <div class="nav-links">
+            <a href="/">Dashboard</a>
+            <a href="/ct1">Internal Marks</a>
+            <a href="/external">External Marks</a>
+            <a href="/lab">Lab Marks</a>
+            <a href="/electives" class="active">Electives</a>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <div class="page-header-inner">
+            <h1 class="page-title">Elective Assignment</h1>
+            <p class="page-sub">
+                Assign students to elective options like PEC, OEC and HSSMEC without changing compulsory enrollments.
+            </p>
+        </div>
+    </div>
+
+    <div class="container">
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">
+            <span>{{ message | safe }}</span>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Step 1 — Select Semester and Elective Group</h2>
+            </div>
+            <div class="card-body">
+                <form method="GET" action="/electives">
+                    <div class="form-grid three-col">
+                        <div class="form-group">
+                            <label class="form-label">Semester</label>
+                            <select name="semester_id" class="form-control" required onchange="this.form.submit()">
+                                <option value="">-- Select Semester --</option>
+                                {% for sem in all_semesters %}
+                                <option value="{{ sem.semester_id }}" {% if sem.semester_id == selected_semester %}selected{% endif %}>
+                                    Semester {{ sem.semester_id }} ({{ sem.academic_year }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        {% if selected_semester %}
+                        <div class="form-group">
+                            <label class="form-label">Elective Group</label>
+                            <select name="elective_group" class="form-control" required onchange="this.form.submit()">
+                                <option value="">-- Select Group --</option>
+                                {% for group in groups %}
+                                <option value="{{ group }}" {% if group == selected_group %}selected{% endif %}>
+                                    {{ group }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+
+                        {% if selected_semester %}
+                        <div class="form-group">
+                            <label class="form-label">Academic Year</label>
+                            <input type="text" class="form-control" value="{{ academic_year or 'N/A' }}" readonly>
+                        </div>
+                        {% endif %}
+                    </div>
+                </form>
+
+                {% if selected_semester and not groups %}
+                <div class="alert alert-info">
+                    No elective options found for this semester. Check subjects table columns: is_elective, elective_group and parent_subject_code.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if selected_group %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Step 2 — Select Elective Option</h2>
+            </div>
+            <div class="card-body">
+                <div class="mini-note">
+                    Choose one actual elective option. The number on each card shows how many students are currently assigned to that option.
+                </div>
+
+                {% if options %}
+                <div class="option-grid">
+                    {% for subj in options %}
+                    <a class="option-card {% if subj.subject_code == selected_subject %}active{% endif %}"
+                        href="/electives?semester_id={{ selected_semester }}&elective_group={{ selected_group | urlencode }}&subject_code={{ subj.subject_code | urlencode }}">
+                        <div class="option-code">{{ subj.subject_code }}</div>
+                        <div class="option-name">{{ subj.subject_name }}</div>
+                        <div class="option-meta">
+                            <span class="info-chip">{{ subj.subject_type }}</span>
+                            <span class="info-chip">{{ subj.credits }} Credits</span>
+                            <span class="info-chip">{{ option_counts.get(subj.subject_code, 0) }} Assigned</span>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="alert alert-error">No option subjects found for this elective group.</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if selected_subject %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Step 3 — Select Students and Save Assignment</h2>
+            </div>
+            <div class="card-body">
+                <div class="mini-note">
+                    Saving will remove the selected students from their previous option in the same elective group, then assign them to
+                    <strong>{{ selected_subject }}</strong>. It will not delete compulsory subject enrollments or marks records.
+                </div>
+
+                {% if students %}
+                <form method="POST" action="/electives/save" onsubmit="return confirmSaveElectives();">
+                    <input type="hidden" name="semester_id" value="{{ selected_semester }}">
+                    <input type="hidden" name="elective_group" value="{{ selected_group }}">
+                    <input type="hidden" name="subject_code" value="{{ selected_subject }}">
+
+                    <div class="toolbar">
+                        <div class="info-row" style="margin-bottom:0;">
+                            <span class="info-chip">Semester {{ selected_semester }}</span>
+                            <span class="info-chip">{{ selected_group }}</span>
+                            <span class="info-chip">{{ selected_subject }}</span>
+                            <span class="info-chip">{{ selected_prns | length }} Currently Assigned</span>
+                        </div>
+                        <div class="btn-row" style="margin-top:0;">
+                            <button type="button" class="btn btn-secondary small-btn" onclick="setAllStudents(true)">Select All</button>
+                            <button type="button" class="btn btn-secondary small-btn" onclick="setAllStudents(false)">Clear All</button>
+                        </div>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table class="student-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:70px;">Select</th>
+                                    <th style="width:70px;">SR</th>
+                                    <th style="width:160px;">PRN</th>
+                                    <th>Student Name</th>
+                                    <th style="width:190px;">Current {{ selected_group }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stu in students %}
+                                {% set current = current_choice.get(stu.prn) %}
+                                <tr>
+                                    <td>
+                                        <input type="checkbox" class="student-check" name="student_prns" value="{{ stu.prn }}"
+                                            {% if stu.prn in selected_prns %}checked{% endif %}>
+                                    </td>
+                                    <td>{{ loop.index }}</td>
+                                    <td><span class="mono">{{ stu.prn }}</span></td>
+                                    <td>{{ stu.name }}</td>
+                                    <td>
+                                        {% if current == selected_subject %}
+                                            <span class="choice-pill current">{{ current }}</span>
+                                        {% elif current %}
+                                            <span class="choice-pill">{{ current }}</span>
+                                        {% else %}
+                                            <span style="color:#9CA3AF;font-style:italic;">Not assigned</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="btn-row" style="margin-top:18px;">
+                        <button type="submit" class="btn btn-primary">
+                            Save Elective Assignment
+                        </button>
+                        <a href="/electives?semester_id={{ selected_semester }}&elective_group={{ selected_group | urlencode }}" class="btn btn-secondary">
+                            Change Option
+                        </a>
+                    </div>
+                </form>
+                {% else %}
+                <div class="alert alert-error">
+                    No students found for this semester/year. First seed or enroll students in compulsory subjects for this semester.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+
+    <footer class="footer">
+        <div class="footer-inner">
+            ECE Student Management System &nbsp;&mdash;&nbsp;
+            Elective Assignment &nbsp;&mdash;&nbsp;
+            Department of Electronics and Computer Engineering
+        </div>
+    </footer>
+
+    <script>
+        function setAllStudents(state) {
+            document.querySelectorAll('.student-check').forEach(cb => cb.checked = state);
+        }
+
+        function confirmSaveElectives() {
+            const checked = document.querySelectorAll('.student-check:checked').length;
+            if (checked === 0) {
+                alert('Please select at least one student.');
+                return false;
+            }
+            return confirm(
+                'This will assign the selected students to the selected elective option.\n' +
+                'Previous option in the same elective group will be removed only for selected students.\n\n' +
+                'Continue?'
+            );
+        }
+    </script>
+
+</body>
+
+</html>

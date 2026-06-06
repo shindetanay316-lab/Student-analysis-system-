@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload External Marks</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: "Times New Roman", Times, serif; background: #EAECEF; color: #1A1A1A; min-height: 100vh; }
+        .navbar { background: #1A2B4A; color: white; height: 58px; padding: 0 32px; display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #C9A227; }
+        .navbar a { color: #fff; text-decoration: none; margin-left: 18px; font-weight: bold; }
+        .container { max-width: 900px; margin: 34px auto; padding: 0 20px; }
+        .card { background: #fff; border-radius: 16px; box-shadow: 0 10px 28px rgba(0,0,0,0.10); border: 1px solid #d8dee8; overflow: hidden; }
+        .card-header { background: #1A2B4A; color: #fff; padding: 22px 26px; border-bottom: 4px solid #C9A227; }
+        .card-header h1 { font-size: 24px; margin-bottom: 6px; }
+        .card-header p { color: #dce5f2; font-size: 14px; }
+        .card-body { padding: 26px; }
+        .flash { padding: 10px 12px; border-radius: 8px; margin-bottom: 14px; font-size: 14px; }
+        .flash.error { background: #fdecea; color: #9f1c12; border: 1px solid #f5c6cb; }
+        .flash.success { background: #eaf7ee; color: #176b32; border: 1px solid #b7e3c3; }
+        .flash.warning { background: #fff7e6; color: #8a5a00; border: 1px solid #ffe2a6; }
+        label { display: block; font-weight: bold; color: #1A2B4A; margin: 18px 0 7px; }
+        select, input[type="file"], input[type="text"] { width: 100%; padding: 11px 12px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; font-size: 15px; }
+        .actions { display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap; }
+        button, .btn { border: 0; background: #C9A227; color: #111827; padding: 12px 18px; border-radius: 10px; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-block; }
+        .btn-secondary { background: #1A2B4A; color: #fff; }
+        .note { margin-top: 16px; color: #64748b; font-size: 14px; line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div><strong>ECE Student Management System</strong></div>
+        <div>
+            <a href="{{ url_for('index') }}">Dashboard</a>
+            <a href="{{ url_for('external.external_marks_page') }}">External Marks</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
+    </nav>
+
+    <main class="container">
+        <section class="card">
+            <div class="card-header">
+                <h1>Upload External Marks</h1>
+                <p>Upload Excel marks for theory ESE. Generic elective parent slots are hidden; real elective options are shown.</p>
+            </div>
+            <div class="card-body">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="flash {{ category }}">{{ message|safe }}</div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <form method="POST" enctype="multipart/form-data" action="{{ url_for('external.upload_external') }}">
+                    <label for="semester_id">Semester</label>
+                    <select name="semester_id" id="semester_id" required>
+                        <option value="">-- Select Semester --</option>
+                        {% for sem in semesters %}
+                            <option value="{{ sem.semester_id }}">Semester {{ sem.semester_id }} - {{ sem.academic_year }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <label for="academic_year">Academic Year</label>
+                    <input type="text" name="academic_year" id="academic_year" placeholder="Example: 2025-26. Leave blank to use semester year.">
+
+                    <label for="subject_code">Subject</label>
+                    <select name="subject_code" id="subject_code" required>
+                        <option value="">-- Select Subject --</option>
+                        {% for subject in subjects %}
+                            <option value="{{ subject.subject_code }}">
+                                Sem {{ subject.semester_id }} | {{ subject.subject_code }} - {{ subject.subject_name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+
+                    <label for="file">External Marks Excel File</label>
+                    <input type="file" name="file" id="file" accept=".xlsx" required>
+
+                    <div class="actions">
+                        <button type="submit">Upload Marks</button>
+                        <a class="btn btn-secondary" href="{{ url_for('external.external_marks_page') }}">Back to External Marks</a>
+                    </div>
+
+                    <p class="note">For elective subjects, students will appear only after admin assigns them to the selected elective option.</p>
+                </form>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

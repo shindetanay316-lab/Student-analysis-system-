@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch Setup — ECE SMS</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ct1.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sms-theme.css') }}">
+    <style>
+        .simple-steps {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .step-box {
+            background: #FFFFFF;
+            border: 1px solid var(--border, #E8E4DC);
+            border-radius: 14px;
+            padding: 15px 16px;
+            box-shadow: 0 2px 8px rgba(26, 22, 18, 0.06);
+        }
+        .step-no {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--gold, #C9A84C), var(--gold-dark, #9B7A2F));
+            color: #0C0F1A;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            margin-bottom: 8px;
+        }
+        .step-title {
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--text-1, #1A1612);
+            margin-bottom: 4px;
+        }
+        .step-text {
+            font-size: 12.5px;
+            color: var(--text-2, #5C5348);
+            line-height: 1.55;
+        }
+        .mini-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+        .mini-card {
+            background: #FFFFFF;
+            border: 1px solid var(--border, #E8E4DC);
+            border-radius: 12px;
+            padding: 12px 14px;
+        }
+        .mini-label {
+            font-size: 10.5px;
+            color: var(--text-3, #777);
+            text-transform: uppercase;
+            font-weight: 800;
+            letter-spacing: .5px;
+        }
+        .mini-value {
+            font-size: 22px;
+            font-weight: 900;
+            color: var(--text-1, #111);
+            margin-top: 4px;
+        }
+        .student-toolbar {
+            display: grid;
+            grid-template-columns: 1.4fr 1fr auto auto;
+            gap: 10px;
+            align-items: end;
+            margin-bottom: 14px;
+        }
+        .selected-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 12px 14px;
+            background: #FFFBEB;
+            border: 1px solid rgba(201,168,76,.45);
+            border-radius: 12px;
+            margin-top: 14px;
+            position: sticky;
+            bottom: 10px;
+            z-index: 20;
+            box-shadow: 0 4px 14px rgba(26, 22, 18, 0.08);
+        }
+        .selected-count {
+            font-weight: 800;
+            color: #6B4F13;
+            font-size: 13px;
+        }
+        .table-wrap { overflow-x: auto; }
+        .batch-table { width: 100%; border-collapse: collapse; }
+        .batch-table th,
+        .batch-table td {
+            border: 1px solid var(--border, #E8E4DC);
+            padding: 9px 10px;
+            font-size: 13px;
+        }
+        .batch-table th { text-align: left; }
+        .batch-table td:first-child,
+        .batch-table th:first-child { text-align: center; width: 48px; }
+        .batch-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 10px;
+            border-radius: 999px;
+            background: rgba(201,168,76,.14);
+            color: #6B4F13;
+            border: 1px solid rgba(201,168,76,.35);
+            font-size: 12px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+        .muted-pill {
+            background: #F3F4F6;
+            border-color: #E5E7EB;
+            color: #6B7280;
+        }
+        .hidden-row { display: none; }
+        .note-box {
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
+            padding: 12px 14px;
+            color: #475569;
+            font-size: 12.5px;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+        @media(max-width:900px){
+            .simple-steps, .mini-stats { grid-template-columns: 1fr 1fr; }
+            .student-toolbar { grid-template-columns: 1fr; }
+            .selected-bar { flex-direction: column; align-items: stretch; }
+        }
+        @media(max-width:600px){
+            .simple-steps, .mini-stats { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="nav-brand-text">
+                <div class="nav-title">ECE Student Management System</div>
+                <div class="nav-sub">Simple Batch / Division Setup</div>
+            </div>
+        </div>
+        <div class="nav-links">
+            <a href="/">Dashboard</a>
+            <a href="/ct1">Internal</a>
+            <a href="/external">External</a>
+            <a href="/lab">Lab</a>
+            <a href="/electives">Electives</a>
+            <a href="/batches" class="active">Batches</a>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <div class="page-header-inner">
+            <h1 class="page-title">Batch / Division Setup</h1>
+            <p class="page-sub">Simple flow: choose target batch, tick students, save.</p>
+        </div>
+    </div>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}"><span>{{ message | safe }}</span></div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <div class="simple-steps">
+            <div class="step-box">
+                <div class="step-no">1</div>
+                <div class="step-title">Choose target</div>
+                <div class="step-text">Select the Division and Batch you want to assign.</div>
+            </div>
+            <div class="step-box">
+                <div class="step-no">2</div>
+                <div class="step-title">Tick students</div>
+                <div class="step-text">Search or filter students, then tick the required names.</div>
+            </div>
+            <div class="step-box">
+                <div class="step-no">3</div>
+                <div class="step-title">Save</div>
+                <div class="step-text">Click Save Assignment. Marks and enrollments are not changed.</div>
+            </div>
+        </div>
+
+        <div class="mini-stats">
+            <div class="mini-card"><div class="mini-label">Total</div><div class="mini-value">{{ total_students }}</div></div>
+            <div class="mini-card"><div class="mini-label">Unassigned</div><div class="mini-value">{{ unassigned_count }}</div></div>
+            <div class="mini-card"><div class="mini-label">Division A</div><div class="mini-value">{{ counts.get('A', 0) }}</div></div>
+            <div class="mini-card"><div class="mini-label">Division B</div><div class="mini-value">{{ counts.get('B', 0) }}</div></div>
+        </div>
+
+        <form method="POST" action="/batches/save" id="batchForm">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">1 — Select Division and Batch to Assign</h2>
+                </div>
+                <div class="card-body">
+                    <div class="form-grid two-col">
+                        <div class="form-group">
+                            <label class="form-label">Division to assign</label>
+                            <select name="division" id="assignDivision" class="form-control" required onchange="filterBatchOptions()">
+                                <option value="">-- Select Division --</option>
+                                {% for div in division_options %}
+                                <option value="{{ div }}">Division {{ div }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Batch to assign</label>
+                            <select name="batch" id="assignBatch" class="form-control" required>
+                                <option value="">-- Select Batch --</option>
+                                {% for b in batch_options %}
+                                <option value="{{ b }}" data-division="{{ b[0] }}">Batch {{ b }} — currently {{ batch_counts.get(b, 0) }} student(s)</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">2 — Tick Students</h2>
+                </div>
+                <div class="card-body">
+                    <div class="note-box">
+                        Use search/filter only to find students faster. Saving applies only to ticked students. Batch choices are matched automatically with the selected division.
+                    </div>
+
+                    <div class="student-toolbar">
+                        <div class="form-group">
+                            <label class="form-label">Search PRN / Name</label>
+                            <input type="text" id="studentSearch" class="form-control" placeholder="Type PRN or student name" oninput="filterStudents()">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Show</label>
+                            <select id="showFilter" class="form-control" onchange="filterStudents()">
+                                <option value="all">All students</option>
+                                <option value="unassigned">Only unassigned</option>
+                                <option value="A">Division A</option>
+                                <option value="B">Division B</option>
+                                {% for b in batch_options %}
+                                <option value="batch:{{ b }}">Batch {{ b }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="button" class="btn btn-secondary" onclick="setVisible(true)">Select Visible</button>
+                        <button type="button" class="btn btn-secondary" onclick="setVisible(false)">Clear Visible</button>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table class="batch-table">
+                            <thead>
+                                <tr>
+                                    <th><input type="checkbox" onclick="setVisible(this.checked)"></th>
+                                    <th>SR</th>
+                                    <th>PRN</th>
+                                    <th>Student Name</th>
+                                    <th>Current Division</th>
+                                    <th>Current Batch</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stu in students %}
+                                <tr class="student-row"
+                                    data-prn="{{ stu.prn|lower }}"
+                                    data-name="{{ stu.name|lower }}"
+                                    data-division="{{ (stu.division or '') }}"
+                                    data-batch="{{ (stu.batch or '') }}">
+                                    <td><input type="checkbox" name="student_prns" value="{{ stu.prn }}" class="student-check" onchange="updateSelectedCount()"></td>
+                                    <td>{{ loop.index }}</td>
+                                    <td>{{ stu.prn }}</td>
+                                    <td>{{ stu.name }}</td>
+                                    <td>
+                                        {% if stu.division %}<span class="batch-pill">Division {{ stu.division }}</span>{% else %}<span class="batch-pill muted-pill">Not Set</span>{% endif %}
+                                    </td>
+                                    <td>
+                                        {% if stu.batch %}<span class="batch-pill">Batch {{ stu.batch }}</span>{% else %}<span class="batch-pill muted-pill">Not Set</span>{% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% if not students %}
+                                <tr><td colspan="6" style="text-align:center;padding:22px;">No students found.</td></tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="selected-bar">
+                        <div class="selected-count" id="selectedCount">0 students selected</div>
+                        <div class="btn-row" style="margin:0;">
+                            <button type="submit" class="btn btn-primary" onclick="return confirmSave()">Save Assignment</button>
+                            <button type="submit" formaction="/batches/clear" class="btn btn-report-pdf" onclick="return confirmClear()">Clear Selected</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <footer class="footer">
+        <div class="footer-inner">ECE Student Management System — Batch / Division Setup</div>
+    </footer>
+
+    <script>
+        function visibleRows() {
+            return Array.from(document.querySelectorAll('.student-row')).filter(row => !row.classList.contains('hidden-row'));
+        }
+
+        function updateSelectedCount() {
+            const count = document.querySelectorAll('.student-check:checked').length;
+            const label = document.getElementById('selectedCount');
+            label.textContent = count + (count === 1 ? ' student selected' : ' students selected');
+        }
+
+        function setVisible(checked) {
+            visibleRows().forEach(row => {
+                const cb = row.querySelector('.student-check');
+                if (cb) cb.checked = checked;
+            });
+            filterBatchOptions();
+        updateSelectedCount();
+        }
+
+        function filterStudents() {
+            const text = (document.getElementById('studentSearch').value || '').toLowerCase().trim();
+            const mode = document.getElementById('showFilter').value;
+
+            document.querySelectorAll('.student-row').forEach(row => {
+                const prn = row.dataset.prn || '';
+                const name = row.dataset.name || '';
+                const div = row.dataset.division || '';
+                const batch = row.dataset.batch || '';
+
+                let matchesText = !text || prn.includes(text) || name.includes(text);
+                let matchesMode = true;
+
+                if (mode === 'unassigned') {
+                    matchesMode = !div || !batch;
+                } else if (mode === 'A' || mode === 'B') {
+                    matchesMode = div === mode;
+                } else if (mode.startsWith('batch:')) {
+                    matchesMode = batch === mode.replace('batch:', '');
+                }
+
+                row.classList.toggle('hidden-row', !(matchesText && matchesMode));
+            });
+        }
+
+        function filterBatchOptions() {
+            const division = document.getElementById('assignDivision').value;
+            const batchSelect = document.getElementById('assignBatch');
+            if (!batchSelect) return;
+
+            Array.from(batchSelect.options).forEach(opt => {
+                if (!opt.value) {
+                    opt.hidden = false;
+                    return;
+                }
+                opt.hidden = division && opt.dataset.division !== division;
+            });
+
+            const selected = batchSelect.options[batchSelect.selectedIndex];
+            if (selected && selected.hidden) {
+                batchSelect.value = '';
+            }
+        }
+
+        function confirmSave() {
+            const count = document.querySelectorAll('.student-check:checked').length;
+            if (count === 0) {
+                alert('Please tick at least one student.');
+                return false;
+            }
+            const division = document.getElementById('assignDivision').value;
+            const batch = document.getElementById('assignBatch').value;
+            if (!division || !batch) {
+                alert('Please select both division and batch.');
+                return false;
+            }
+            if (!batch.startsWith(division)) {
+                alert('Selected batch does not belong to selected division.');
+                return false;
+            }
+            return confirm('Save Division ' + division + ', Batch ' + batch + ' for ' + count + ' selected student(s)?');
+        }
+
+        function confirmClear() {
+            const count = document.querySelectorAll('.student-check:checked').length;
+            if (count === 0) {
+                alert('Please tick at least one student.');
+                return false;
+            }
+            return confirm('Clear division and batch for ' + count + ' selected student(s)?');
+        }
+
+        filterBatchOptions();
+        updateSelectedCount();
+    </script>
+</body>
+</html>
