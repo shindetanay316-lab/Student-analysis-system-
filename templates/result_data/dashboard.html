@@ -1,0 +1,63 @@
+{% extends "result_data/base.html" %}
+{% block title %}University Result PDFs | ECE Academic Records{% endblock %}
+{% block workspace_title %}PDF imports{% endblock %}
+{% block content %}
+<header class="page-heading d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
+    <div>
+        <div class="eyebrow">University result processing</div>
+        <h1 class="display-title mb-2">University Result PDF imports</h1>
+        <p class="page-subtitle mb-0">Extract, verify, and analyze university result records inside the same academic workspace.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-primary" href="{{ url_for('result_imports.history') }}"><i class="bi bi-clock-history" aria-hidden="true"></i> Import history</a>
+        <a class="btn btn-primary" href="{{ url_for('result_imports.upload') }}"><i class="bi bi-file-earmark-arrow-up" aria-hidden="true"></i> Upload PDF</a>
+    </div>
+</header>
+
+<div class="workflow-strip" aria-label="University result workflow">
+    <a class="workflow-step" href="{{ url_for('result_imports.upload') }}"><span class="workflow-number">1</span><span class="workflow-copy"><strong>Upload PDF</strong><span>Select a machine-readable university result file.</span></span></a>
+    <span class="workflow-step"><span class="workflow-number">2</span><span class="workflow-copy"><strong>Extract and validate</strong><span>Create structured records and run calculation checks.</span></span></span>
+    <span class="workflow-step"><span class="workflow-number">3</span><span class="workflow-copy"><strong>Review and confirm</strong><span>Correct flagged fields and approve the dataset.</span></span></span>
+    <a class="workflow-step" href="{{ url_for('result_analysis.index') }}"><span class="workflow-number">4</span><span class="workflow-copy"><strong>Analyze and export</strong><span>Review outcomes and download verified records.</span></span></a>
+</div>
+
+<section class="module-banner">
+    <div><h2>One academic record workflow</h2><p>Internal records and university PDF results now use the same navigation, semester context, account, and reporting workspace.</p></div>
+    <a class="btn btn-sm" href="{{ url_for('index') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> Academic overview</a>
+</section>
+
+<div class="row g-3 mb-4">
+    {% set metrics = [
+        ('Total imports', total_imports, 'bi-files', 'primary', 'All uploaded result files'),
+        ('Needs review', review_required, 'bi-clipboard-check', 'warning', 'Waiting for faculty verification'),
+        ('Validation errors', validation_errors, 'bi-exclamation-octagon', 'danger', 'Must be resolved before confirmation'),
+        ('Confirmed', ready, 'bi-patch-check', 'success', 'Ready for analysis and export')
+    ] %}
+    {% for label, value, icon, tone, context in metrics %}
+    <div class="col-6 col-xl-3"><article class="metric-card metric-{{ tone }} h-100"><div class="metric-icon"><i class="bi {{ icon }}" aria-hidden="true"></i></div><div class="metric-label">{{ label }}</div><div class="metric-value">{{ value }}</div><div class="metric-context">{{ context }}</div></article></div>
+    {% endfor %}
+</div>
+
+<section class="content-card p-0 overflow-hidden">
+    <div class="section-heading px-4 pt-4 mb-3"><div><div class="eyebrow">Current work</div><h2>Recent imports</h2></div><a class="back-link" href="{{ url_for('result_imports.history') }}">View complete register <i class="bi bi-arrow-right" aria-hidden="true"></i></a></div>
+    {% if recent_imports %}
+    <div class="table-responsive">
+        <table class="table professional-table table-hover align-middle mb-0">
+            <thead><tr><th>File</th><th>Workflow status</th><th>Validation</th><th>Uploaded</th><th>Next action</th></tr></thead>
+            <tbody>
+            {% for job in recent_imports %}
+                {% set badge_style = {'REVIEW_REQUIRED': 'warning', 'READY': 'success', 'FAILED': 'danger', 'EXTRACTING': 'info'}.get(job.status, 'secondary') %}
+                <tr>
+                    <td><strong class="text-break d-block">{{ job.original_filename }}</strong><span class="table-meta">Import #{{ job.id }} · {{ job.size_label }}</span></td>
+                    <td><span class="badge text-bg-{{ badge_style }}">{{ job.status.replace('_', ' ') }}</span></td>
+                    <td>{% if job.report %}{% set validation_style = {'VALID': 'success', 'WARNING': 'warning', 'ERROR': 'danger'}.get(job.report.validation_status, 'secondary') %}<span class="badge text-bg-{{ validation_style }}">{{ job.report.validation_status.replace('_', ' ') }}</span>{% if job.report.validation_error_count or job.report.validation_warning_count %}<div class="table-meta">{{ job.report.validation_error_count }} errors · {{ job.report.validation_warning_count }} warnings</div>{% endif %}{% else %}<span class="text-secondary">Not extracted</span>{% endif %}</td>
+                    <td>{{ job.created_at.strftime('%d %b %Y, %H:%M') }}</td>
+                    <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('result_imports.detail', import_job_id=job.id) }}"><i class="bi bi-arrow-right" aria-hidden="true"></i> {{ 'Analyze' if job.status == 'READY' else 'Continue review' }}</a></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}<div class="empty-panel p-5"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i><h3 class="h6">No university results imported</h3><p>Upload the first result PDF to begin the review workflow.</p><a class="btn btn-primary" href="{{ url_for('result_imports.upload') }}"><i class="bi bi-file-earmark-arrow-up" aria-hidden="true"></i> Upload PDF</a></div>{% endif %}
+</section>
+{% endblock %}

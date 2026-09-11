@@ -1,0 +1,26 @@
+.analytics-shell { margin: 0 auto; max-width: 1440px; min-height: auto; padding: 28px clamp(20px, 3vw, 40px) 44px; }
+.analytics-topbar { align-items: flex-end; background: transparent; border: 0; border-radius: 0; box-shadow: none; color: var(--institution-text); margin-bottom: 24px; padding: 0; }
+.analytics-topbar h1 { color: var(--institution-navy); font-family: Inter, "Segoe UI", sans-serif; font-size: 1.75rem; font-weight: 720; letter-spacing: -.025em; }
+.analytics-topbar p { color: var(--institution-muted); font-size: .9rem; line-height: 1.55; max-width: 760px; }
+.analytics-topbar .back-link { background: #fff; border: 1px solid #9fb3c5; border-radius: 5px; color: var(--institution-blue); font-size: .8rem; padding: 8px 12px; }
+.filter-grid { gap: 14px; margin-bottom: 24px; }
+.analytics-card,
+.metric-card,
+.chart-card { border: 1px solid var(--institution-border); border-radius: var(--institution-radius); box-shadow: var(--institution-shadow); }
+.filter-card { border-top: 1px solid var(--institution-border); padding: 16px; }
+.filter-card label { color: #394a5e; font-size: .78rem; font-weight: 650; letter-spacing: 0; }
+.filter-card select { background: #fff; border: 1px solid #bfc9d4; border-radius: 5px; font-family: inherit; font-size: .85rem; }
+.filter-card select:focus { border-color: var(--institution-blue); box-shadow: 0 0 0 3px rgba(36,85,122,.12); }
+.visual-title-row h2 { color: var(--institution-navy); font-size: 1.25rem; }
+.visual-title-row p { color: var(--institution-muted); }
+.metric-grid { gap: 14px; }
+.metric-card { min-height: 118px; padding: 17px; }
+.metric-card.danger { border-bottom: 3px solid var(--institution-danger); border-color: var(--institution-border); }
+.metric-label { color: #526174; font-size: .72rem; letter-spacing: .04em; }
+.metric-value { color: var(--institution-navy); font-size: 1.85rem; font-variant-numeric: tabular-nums; }
+.metric-sub { color: var(--institution-muted); font-size: .78rem; }
+.chart-card { padding: 18px; }
+.chart-card h3 { color: var(--institution-navy); font-family: inherit; font-size: .95rem; }
+.chart-card p { color: var(--institution-muted); }
+.badge { border-radius: 4px; }
+@media (max-width: 900px) { .analytics-shell { padding: 20px 14px 36px; } }

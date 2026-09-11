@@ -1,0 +1,138 @@
+{% extends "result_data/base.html" %}
+{% block title %}Result Analysis | ECE Academic Records{% endblock %}
+{% block workspace_title %}Result analysis{% endblock %}
+{% block content %}
+<div class="page-heading d-flex flex-column flex-xl-row justify-content-between align-items-xl-end gap-3 mb-4" data-reveal>
+    <div>
+        <a class="back-link" href="{{ url_for('result_imports.detail', import_job_id=job.id) }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> Import #{{ job.id }}</a>
+        <div class="eyebrow mt-3">Confirmed university dataset</div>
+        <h1 class="display-title mb-2">University result analysis</h1>
+        <p class="page-subtitle mb-0">{{ report.branch or report.programme }} · Semester {{ report.semester or '—' }} · {{ report.examination_session or 'Session not printed' }}</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-primary" href="{{ url_for('result_imports.students', import_job_id=job.id) }}"><i class="bi bi-people" aria-hidden="true"></i> Review students</a>
+        <a class="btn btn-primary" href="{{ url_for('result_exports.excel', import_job_id=job.id) }}"><i class="bi bi-file-earmark-excel" aria-hidden="true"></i> Export Excel</a>
+    </div>
+</div>
+
+<div class="workflow-strip" aria-label="University result workflow">
+    <span class="workflow-step"><span class="workflow-number"><i class="bi bi-check" aria-hidden="true"></i></span><span class="workflow-copy"><strong>PDF uploaded</strong><span>Source document registered.</span></span></span>
+    <span class="workflow-step"><span class="workflow-number"><i class="bi bi-check" aria-hidden="true"></i></span><span class="workflow-copy"><strong>Data extracted</strong><span>Academic records created.</span></span></span>
+    <span class="workflow-step"><span class="workflow-number">{{ 3 if job.status != 'READY' else '✓' }}</span><span class="workflow-copy"><strong>{{ 'Review required' if job.status != 'READY' else 'Dataset confirmed' }}</strong><span>Validation status: {{ report.validation_status|lower }}.</span></span></span>
+    <span class="workflow-step workflow-current"><span class="workflow-number">4</span><span class="workflow-copy"><strong>Analyze and export</strong><span>Review outcomes and prepare files.</span></span></span>
+</div>
+
+{% if job.status != 'READY' %}
+<div class="alert alert-warning d-flex gap-3 align-items-start" role="alert" data-reveal>
+    <i class="bi bi-exclamation-triangle-fill fs-5" aria-hidden="true"></i>
+    <div><strong>Provisional analysis.</strong> This dataset is still {{ job.status.replace('_', ' ')|lower }}. Resolve validation errors and confirm it before using these figures officially.</div>
+</div>
+{% else %}
+<div class="analysis-status analysis-status-ready" data-reveal><i class="bi bi-patch-check-fill" aria-hidden="true"></i><span>Confirmed dataset · Analysis uses reviewed values</span></div>
+{% endif %}
+
+<div class="row g-3 mb-4" data-reveal>
+    {% set metrics = [
+        ('Students', analysis.summary.students, 'bi-people', 'primary', analysis.summary.subjects ~ ' subjects in this report'),
+        ('Pass rate', (analysis.summary.pass_rate ~ '%') if analysis.summary.pass_rate is not none else '—', 'bi-mortarboard', 'success', 'Declared pass/fail results'),
+        ('Average SGPA', analysis.summary.average_sgpa if analysis.summary.average_sgpa is not none else '—', 'bi-graph-up-arrow', 'info', 'Calculated value preferred'),
+        ('Highest SGPA', analysis.summary.highest_sgpa if analysis.summary.highest_sgpa is not none else '—', 'bi-award', 'warning', analysis.summary.completion_rate ~ '% record completion')
+    ] %}
+    {% for label, value, icon, tone, context in metrics %}
+    <div class="col-6 col-xl-3">
+        <article class="metric-card metric-{{ tone }} h-100">
+            <div class="metric-icon"><i class="bi {{ icon }}" aria-hidden="true"></i></div>
+            <div class="metric-label">{{ label }}</div>
+            <div class="metric-value">{{ value }}</div>
+            <div class="metric-context">{{ context }}</div>
+        </article>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-7" data-reveal>
+        <section class="content-card h-100">
+            <div class="section-heading">
+                <div><div class="eyebrow">Distribution</div><h2>SGPA profile</h2></div>
+                <span class="section-note">{{ analysis.summary.summaries }} student summaries</span>
+            </div>
+            <div class="chart-wrap chart-wrap-lg"><canvas id="sgpaChart" role="img" aria-label="Number of students in each SGPA range"></canvas></div>
+        </section>
+    </div>
+    <div class="col-xl-5" data-reveal>
+        <section class="content-card h-100">
+            <div class="section-heading"><div><div class="eyebrow">Outcome</div><h2>Result status</h2></div></div>
+            <div class="chart-wrap chart-wrap-lg"><canvas id="resultStatusChart" role="img" aria-label="Pass, fail and cancelled student distribution"></canvas></div>
+        </section>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-8" data-reveal>
+        <section class="content-card h-100">
+            <div class="section-heading">
+                <div><div class="eyebrow">Subject comparison</div><h2>Subject performance</h2></div>
+                <span class="section-note">Average marks and pass rate (%)</span>
+            </div>
+            {% if analysis.subject_performance %}
+            <div class="chart-wrap chart-wrap-subject"><canvas id="subjectChart" role="img" aria-label="Average mark percentage and pass rate by subject"></canvas></div>
+            {% else %}<div class="empty-panel"><i class="bi bi-bar-chart" aria-hidden="true"></i><p>No scored subjects are available.</p></div>{% endif %}
+        </section>
+    </div>
+    <div class="col-xl-4" data-reveal>
+        <section class="content-card h-100">
+            <div class="section-heading"><div><div class="eyebrow">Data quality</div><h2>Validation status</h2></div></div>
+            <div class="chart-wrap chart-wrap-md"><canvas id="validationChart" role="img" aria-label="Student validation status distribution"></canvas></div>
+            <div class="quality-summary">
+                <span><i class="bi bi-x-octagon text-danger" aria-hidden="true"></i> {{ report.validation_error_count }} errors</span>
+                <span><i class="bi bi-exclamation-circle text-warning" aria-hidden="true"></i> {{ report.validation_warning_count }} warnings</span>
+            </div>
+        </section>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-6" data-reveal>
+        <section class="content-card h-100">
+            <div class="section-heading"><div><div class="eyebrow">Grades</div><h2>Grade distribution</h2></div></div>
+            <div class="chart-wrap chart-wrap-md"><canvas id="gradeChart" role="img" aria-label="Number of subject results by grade"></canvas></div>
+        </section>
+    </div>
+    <div class="col-xl-6" data-reveal>
+        <section class="content-card h-100">
+            <div class="section-heading"><div><div class="eyebrow">Assessment components</div><h2>Average attainment</h2></div><span class="section-note">Percentage of maximum marks</span></div>
+            <div class="chart-wrap chart-wrap-md"><canvas id="componentChart" role="img" aria-label="Average percentage scored by assessment component"></canvas></div>
+        </section>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-xl-6" data-reveal>
+        <section class="content-card h-100">
+            <div class="section-heading"><div><div class="eyebrow">Merit view</div><h2>Top performers</h2></div></div>
+            {% if analysis.top_performers %}
+            <div class="table-responsive"><table class="table professional-table align-middle mb-0"><thead><tr><th>Student</th><th>SGPA</th><th>Total marks</th><th></th></tr></thead><tbody>
+                {% for student in analysis.top_performers %}<tr><td><strong>{{ student.name }}</strong><div class="table-meta">{{ student.seat_number }}</div></td><td><span class="score-chip">{{ student.sgpa }}</span></td><td>{{ student.total_marks if student.total_marks is not none else '—' }}</td><td class="text-end"><a class="icon-link" aria-label="Review {{ student.name }}" href="{{ url_for('result_imports.student_detail', import_job_id=job.id, student_id=student.id) }}"><i class="bi bi-arrow-up-right" aria-hidden="true"></i></a></td></tr>{% endfor %}
+            </tbody></table></div>
+            {% else %}<div class="empty-panel"><p>No SGPA values are available.</p></div>{% endif %}
+        </section>
+    </div>
+    <div class="col-xl-6" data-reveal>
+        <section class="content-card h-100">
+            <div class="section-heading"><div><div class="eyebrow">Intervention view</div><h2>Students requiring attention</h2></div></div>
+            {% if analysis.attention_students %}
+            <div class="table-responsive"><table class="table professional-table align-middle mb-0"><thead><tr><th>Student</th><th>SGPA</th><th>Reason</th><th></th></tr></thead><tbody>
+                {% for student in analysis.attention_students %}<tr><td><strong>{{ student.name }}</strong><div class="table-meta">{{ student.seat_number }}</div></td><td><span class="score-chip score-chip-alert">{{ student.sgpa }}</span></td><td>{{ student.reason }}</td><td class="text-end"><a class="icon-link" aria-label="Review {{ student.name }}" href="{{ url_for('result_imports.student_detail', import_job_id=job.id, student_id=student.id) }}"><i class="bi bi-arrow-up-right" aria-hidden="true"></i></a></td></tr>{% endfor %}
+            </tbody></table></div>
+            {% else %}<div class="empty-panel"><p>No student summaries require display.</p></div>{% endif %}
+        </section>
+    </div>
+</div>
+
+<script id="analysis-data" type="application/json">{{ analysis|tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+<script src="{{ url_for('static', filename='result_data/js/analysis.js') }}" defer></script>
+{% endblock %}

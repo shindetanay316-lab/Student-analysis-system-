@@ -1,0 +1,71 @@
+{% extends "result_data/base.html" %}
+{% block title %}{{ student.seat_number }} | ECE Academic Records{% endblock %}
+{% block workspace_title %}Student record{% endblock %}
+{% block content %}
+{% set validation_style = {'VALID': 'success', 'WARNING': 'warning', 'ERROR': 'danger', 'SKIPPED': 'secondary'}.get(student.validation_status, 'secondary') %}
+<header class="page-heading d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4" data-reveal>
+    <div>
+        <a class="back-link" href="{{ url_for('result_imports.students', import_job_id=job.id) }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> Review students</a>
+        <div class="eyebrow mt-3">Student result record</div>
+        <h1 class="display-title mb-1">{{ student.name }}</h1>
+        <p class="page-subtitle mb-0"><span class="font-monospace">{{ student.seat_number }}</span> · {{ student.result_status }}</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <span class="badge text-bg-{{ validation_style }} align-self-center fs-6">{{ student.validation_status }}</span>
+        <a class="btn btn-primary" href="{{ url_for('result_imports.edit_student', import_job_id=job.id, student_id=student.id) }}"><i class="bi bi-pencil-square" aria-hidden="true"></i> Correct record</a>
+    </div>
+</header>
+
+<div class="d-flex justify-content-between mb-4">
+    {% if previous_student %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('result_imports.student_detail', import_job_id=job.id, student_id=previous_student.id) }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> Previous student</a>{% else %}<span></span>{% endif %}
+    {% if next_student %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('result_imports.student_detail', import_job_id=job.id, student_id=next_student.id) }}">Next student <i class="bi bi-arrow-right" aria-hidden="true"></i></a>{% endif %}
+</div>
+
+{% if student.validation_issues %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white border-0 pt-4 px-4"><h2 class="h5 mb-0">Validation findings</h2></div>
+    <div class="table-responsive">
+        <table class="table align-middle mb-0"><thead class="table-light"><tr><th>Severity</th><th>Subject</th><th>Issue</th><th>Reported</th><th>Calculated</th></tr></thead><tbody>
+        {% for issue in student.validation_issues %}
+        <tr><td><span class="badge text-bg-{{ 'danger' if issue.severity == 'ERROR' else 'warning' }}">{{ issue.severity }}</span></td><td class="font-monospace">{{ issue.subject_result.subject.subject_code if issue.subject_result else '—' }}</td><td>{{ issue.message }}<div><code>{{ issue.code }}</code></div></td><td>{{ issue.reported_value if issue.reported_value is not none else '—' }}</td><td>{{ issue.calculated_value if issue.calculated_value is not none else '—' }}</td></tr>
+        {% endfor %}
+        </tbody></table>
+    </div>
+</div>
+{% endif %}
+
+{% if student.summary %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white border-0 pt-4 px-4"><h2 class="h5 mb-1">Student summary</h2><p class="small text-secondary mb-0">Reported/current values are kept separate from system calculations.</p></div>
+    <div class="table-responsive"><table class="table mb-0"><thead class="table-light"><tr><th>Measure</th><th>Reported / current</th><th>Calculated</th></tr></thead><tbody>
+        <tr><th>SGPA</th><td>{{ student.summary.reported_sgpa if student.summary.reported_sgpa is not none else '—' }}</td><td>{{ student.summary.calculated_sgpa if student.summary.calculated_sgpa is not none else '—' }}</td></tr>
+        <tr><th>Total grade points</th><td>{{ student.summary.reported_total_grade_points if student.summary.reported_total_grade_points is not none else '—' }}</td><td>{{ student.summary.calculated_total_grade_points if student.summary.calculated_total_grade_points is not none else '—' }}</td></tr>
+        <tr><th>Earned credits</th><td>{{ student.summary.reported_earned_credits if student.summary.reported_earned_credits is not none else '—' }}</td><td>{{ student.summary.calculated_earned_credits if student.summary.calculated_earned_credits is not none else '—' }}</td></tr>
+        <tr><th>Total marks</th><td>{{ student.summary.reported_total_marks if student.summary.reported_total_marks is not none else '—' }}</td><td>{{ student.summary.calculated_total_marks if student.summary.calculated_total_marks is not none else '—' }}</td></tr>
+    </tbody></table></div>
+</div>
+{% endif %}
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white border-0 pt-4 px-4"><h2 class="h5 mb-1">Subject results</h2><p class="small text-secondary mb-0">PDF raw values are shown beside the current values used for validation and export.</p></div>
+    <div class="table-responsive result-review-table"><table class="table table-hover align-middle mb-0"><thead class="table-light"><tr><th>Subject</th><th>Components (raw → current)</th><th>Total (raw → current)</th><th>Grade (raw → current)</th><th>Calculated</th><th>Validation</th></tr></thead><tbody>
+        {% for result in student.subject_results %}
+        <tr>
+            <td><div class="font-monospace small">{{ result.subject.subject_code }}</div><div>{{ result.subject.subject_name }}</div><span class="small text-secondary">{{ result.subject.credits }} credits</span></td>
+            <td>{% if result.components %}{% for component in result.components %}<div class="mb-1"><span class="badge text-bg-light border">{{ component.component_type }}</span> <code>{{ component.raw_text }}</code> → <strong>{{ component.numeric_value if component.numeric_value is not none else (component.special_code or '—') }}</strong>{% if component.is_carried_forward %} <span class="badge text-bg-info">CF</span>{% endif %} <span class="small text-secondary">/ {{ component.assessment.maximum_marks }}</span></div>{% endfor %}{% else %}<span class="text-secondary">Grade only</span>{% endif %}</td>
+            <td><code>{{ result.total_raw or '—' }}</code> → <strong>{{ result.total_value if result.total_value is not none else (result.total_special_code or '—') }}</strong>{% if result.total_is_carried_forward %} <span class="badge text-bg-info">CF</span>{% endif %}</td>
+            <td>{% if result.subject.is_audit %}{{ result.audit_grade or '—' }}{% else %}<code>{{ result.grade_raw or '—' }}</code> → <strong>{{ result.grade or '—' }}</strong><div class="small text-secondary">GP {{ result.grade_point if result.grade_point is not none else '—' }} · CP {{ result.credit_points if result.credit_points is not none else '—' }}</div>{% endif %}</td>
+            <td>{% if result.subject.is_audit %}—{% else %}<div>Sum {{ result.component_sum if result.component_sum is not none else '—' }}</div><div class="small text-secondary">{{ result.expected_grade or '—' }} · GP {{ result.expected_grade_point if result.expected_grade_point is not none else '—' }} · CP {{ result.expected_credit_points if result.expected_credit_points is not none else '—' }}</div>{% endif %}</td>
+            <td><span class="badge text-bg-{{ {'VALID': 'success', 'WARNING': 'warning', 'ERROR': 'danger', 'SKIPPED': 'secondary'}.get(result.validation_status, 'secondary') }}">{{ result.validation_status }}</span></td>
+        </tr>
+        {% endfor %}
+    </tbody></table></div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white border-0 pt-4 px-4"><h2 class="h5 mb-1">Correction history</h2><p class="small text-secondary mb-0">This audit log keeps the first PDF-derived value and every later change.</p></div>
+    {% if corrections %}<div class="table-responsive"><table class="table align-middle mb-0"><thead class="table-light"><tr><th>When</th><th>Target</th><th>Field</th><th>Original</th><th>Previous → New</th><th>Reason</th><th>Changed by</th></tr></thead><tbody>
+    {% for correction in corrections %}<tr><td>{{ correction.created_at.strftime('%d %b %Y, %H:%M') }}</td><td>{{ correction.entity_label }}<div class="small text-secondary">{{ correction.entity_type.replace('_', ' ') }}</div></td><td><code>{{ correction.field_name }}</code></td><td>{{ correction.original_value if correction.original_value is not none else 'blank' }}</td><td>{{ correction.previous_value if correction.previous_value is not none else 'blank' }} → <strong>{{ correction.new_value if correction.new_value is not none else 'blank' }}</strong></td><td>{{ correction.reason }}</td><td>{{ correction.changed_by.username if correction.changed_by else 'Account removed' }}</td></tr>{% endfor %}
+    </tbody></table></div>{% else %}<div class="card-body px-4 pb-4"><p class="text-secondary mb-0">No manual corrections have been made for this student.</p></div>{% endif %}
+</div>
+{% endblock %}

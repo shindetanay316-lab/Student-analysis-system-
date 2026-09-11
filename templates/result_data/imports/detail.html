@@ -1,0 +1,298 @@
+{% extends "result_data/base.html" %}
+{% block title %}Import {{ job.id }} | ECE Academic Records{% endblock %}
+{% block workspace_title %}Review import{% endblock %}
+{% block content %}
+{% set badge_style = {
+    'UPLOADED': 'secondary', 'EXTRACTING': 'info', 'REVIEW_REQUIRED': 'warning',
+    'READY': 'success', 'FAILED': 'danger', 'EXPORTED': 'primary'
+}.get(job.status, 'secondary') %}
+<header class="page-heading d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3 mb-4" data-reveal>
+    <div>
+        <a class="back-link" href="{{ url_for('result_data.index') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> PDF imports</a>
+        <div class="eyebrow mt-3">University result workflow</div>
+        <h1 class="display-title mb-1">Review import #{{ job.id }}</h1>
+        <p class="page-subtitle text-break mb-0">{{ job.original_filename }}</p>
+    </div>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        {% if job.report %}<a class="btn btn-outline-primary" href="{{ url_for('result_analysis.dashboard', import_job_id=job.id) }}"><i class="bi bi-bar-chart-line" aria-hidden="true"></i> Open analysis</a>{% endif %}
+        <span class="badge rounded-pill text-bg-{{ badge_style }} fs-6">{{ job.status.replace('_', ' ') }}</span>
+    </div>
+</header>
+
+<div class="workflow-strip" aria-label="University result workflow">
+    <span class="workflow-step"><span class="workflow-number"><i class="bi bi-check" aria-hidden="true"></i></span><span class="workflow-copy"><strong>PDF uploaded</strong><span>The original file is stored unchanged.</span></span></span>
+    <span class="workflow-step {{ 'workflow-current' if job.status in ['UPLOADED', 'FAILED', 'EXTRACTING'] else '' }}"><span class="workflow-number">2</span><span class="workflow-copy"><strong>Extract and validate</strong><span>Read records and check calculations.</span></span></span>
+    <span class="workflow-step {{ 'workflow-current' if job.status == 'REVIEW_REQUIRED' else '' }}"><span class="workflow-number">3</span><span class="workflow-copy"><strong>Review and confirm</strong><span>Resolve issues and approve the dataset.</span></span></span>
+    <a class="workflow-step {{ 'workflow-current' if job.status in ['READY', 'EXPORTED'] else '' }}" {% if job.report %}href="{{ url_for('result_analysis.dashboard', import_job_id=job.id) }}"{% endif %}><span class="workflow-number">4</span><span class="workflow-copy"><strong>Analyze and export</strong><span>Use confirmed university results.</span></span></a>
+</div>
+
+{% if job.status in ['UPLOADED', 'FAILED'] %}
+<div class="card border-0 shadow-sm mb-4" data-reveal>
+    <div class="card-body p-4 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+        <div>
+            <h2 class="h5 mb-1">{{ 'Try extraction again' if job.status == 'FAILED' else 'Ready to extract' }}</h2>
+            <p class="text-secondary mb-0">The original PDF is unchanged. Extraction replaces only this job's generated records.</p>
+        </div>
+        <form method="post" action="{{ url_for('result_imports.extract', import_job_id=job.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-primary" type="submit"><i class="bi bi-cpu" aria-hidden="true"></i> Extract result data</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+{% if job.error_message %}
+<div class="alert alert-danger"><strong>Extraction error:</strong> {{ job.error_message }}</div>
+{% endif %}
+
+{% if job.report %}
+{% set report = job.report %}
+{% set pass_count = report.students | selectattr('result_status', 'equalto', 'PASS') | list | length %}
+{% set fail_count = report.students | selectattr('result_status', 'equalto', 'FAIL') | list | length %}
+{% set cancel_count = report.students | selectattr('result_status', 'equalto', 'CANCEL') | list | length %}
+{% set validation_style = {'VALID': 'success', 'WARNING': 'warning', 'ERROR': 'danger'}.get(report.validation_status, 'secondary') %}
+<div class="row g-3 mb-4" data-reveal>
+    {% for label, value, icon, style in [
+        ('Students', report.students|length, 'bi-people', 'primary'),
+        ('Subjects', report.subjects|length, 'bi-journal-bookmark', 'primary'),
+        ('Validation errors', report.validation_error_count, 'bi-exclamation-octagon', 'danger'),
+        ('Pass / Fail / Cancel', pass_count ~ ' / ' ~ fail_count ~ ' / ' ~ cancel_count, 'bi-check2-circle', 'secondary')
+    ] %}
+    <div class="col-6 col-xl-3">
+        <article class="metric-card metric-{{ style }} h-100"><div class="metric-icon"><i class="bi {{ icon }}" aria-hidden="true"></i></div><div class="metric-label">{{ label }}</div><div class="metric-value">{{ value }}</div></article>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-7">
+                <h2 class="h5 mb-1">Review and confirmation</h2>
+                <p class="text-secondary mb-3">Inspect every student, correct PDF extraction values with an audit trail, and confirm the dataset only after validation.</p>
+                <a class="btn btn-primary" href="{{ url_for('result_imports.students', import_job_id=job.id) }}"><i class="bi bi-people" aria-hidden="true"></i> Review all students</a>
+                <span class="small text-secondary ms-2">{{ report.corrections|length }} corrected fields recorded</span>
+            </div>
+            <div class="col-lg-5 review-separator">
+                {% if job.status == 'READY' %}
+                <div class="alert alert-success mb-0">
+                    <h3 class="h6">Dataset confirmed and ready</h3>
+                    <p class="mb-1">Confirmed {{ job.confirmed_at.strftime('%d %b %Y, %H:%M UTC') if job.confirmed_at else '' }}{% if job.confirmed_by %} by {{ job.confirmed_by.username }}{% endif %}.</p>
+                    {% if job.confirmation_notes %}<p class="small mb-0">{{ job.confirmation_notes }}</p>{% endif %}
+                </div>
+                {% elif report.validation_error_count %}
+                <div class="alert alert-danger mb-0"><strong>Confirmation blocked.</strong> Correct all {{ report.validation_error_count }} validation errors first.</div>
+                {% elif report.validation_status == 'NOT_VALIDATED' %}
+                <div class="alert alert-secondary mb-0">Run validation before confirming this dataset.</div>
+                {% else %}
+                <form method="post" action="{{ url_for('result_imports.confirm', import_job_id=job.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label class="form-label" for="confirmation_notes">Confirmation notes <span class="text-secondary">(optional)</span></label>
+                    <textarea class="form-control form-control-sm mb-2" id="confirmation_notes" name="confirmation_notes" maxlength="1000" rows="2" placeholder="Record any review note"></textarea>
+                    {% if report.validation_warning_count %}
+                    <div class="form-check mb-3"><input class="form-check-input" type="checkbox" value="1" id="acknowledge_warnings" name="acknowledge_warnings" required><label class="form-check-label small" for="acknowledge_warnings">I reviewed and accept the {{ report.validation_warning_count }} remaining warning{{ 's' if report.validation_warning_count != 1 else '' }}.</label></div>
+                    {% endif %}
+                    <button class="btn btn-success" type="submit"><i class="bi bi-patch-check" aria-hidden="true"></i> Confirm dataset as ready</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white border-0 pt-4 px-4 d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <h2 class="h5 mb-0">Validation review</h2>
+                <span class="badge text-bg-{{ validation_style }}">{{ report.validation_status.replace('_', ' ') }}</span>
+            </div>
+            <p class="text-secondary small mb-0">
+                Rule set: {{ report.calculation_rule_version or 'Not run' }}
+                {% if report.validated_at %} · Last run {{ report.validated_at.strftime('%d %b %Y, %H:%M UTC') }}{% endif %}
+            </p>
+        </div>
+        <form method="post" action="{{ url_for('result_imports.validate', import_job_id=job.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Run validation again</button>
+        </form>
+    </div>
+    {% if report.validation_issues %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr><th>Severity</th><th>Student</th><th>Subject</th><th>Issue</th><th>Reported</th><th>Calculated</th></tr>
+            </thead>
+            <tbody>
+            {% for issue in report.validation_issues %}
+                <tr>
+                    <td><span class="badge text-bg-{{ 'danger' if issue.severity == 'ERROR' else 'warning' }}">{{ issue.severity }}</span></td>
+                    <td>{% if issue.student %}<span class="font-monospace small">{{ issue.student.seat_number }}</span><br><span class="small">{{ issue.student.name }}</span>{% else %}—{% endif %}</td>
+                    <td>{% if issue.subject_result %}<span class="font-monospace small">{{ issue.subject_result.subject.subject_code }}</span>{% else %}—{% endif %}</td>
+                    <td><div>{{ issue.message }}</div><code class="small">{{ issue.code }}</code></td>
+                    <td>{{ issue.reported_value if issue.reported_value is not none else '—' }}</td>
+                    <td>{{ issue.calculated_value if issue.calculated_value is not none else '—' }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% elif report.validation_status == 'VALID' %}
+    <div class="card-body pt-2 px-4 pb-4">
+        <div class="alert alert-success mb-0">No calculation or validation issues were detected.</div>
+    </div>
+    {% else %}
+    <div class="card-body pt-2 px-4 pb-4">
+        <div class="alert alert-secondary mb-0">Validation has not run for this extracted report yet.</div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4 d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+        <div>
+            <h2 class="h5 mb-1">Export result dataset</h2>
+            <p class="text-secondary mb-0">Downloads preserve reported values, calculated values, and validation findings. Records with warnings are not silently changed or removed.</p>
+        </div>
+        {% if report.validation_status != 'NOT_VALIDATED' %}
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-success" href="{{ url_for('result_exports.excel', import_job_id=job.id) }}"><i class="bi bi-file-earmark-excel" aria-hidden="true"></i> Download Excel</a>
+            <a class="btn btn-outline-primary" href="{{ url_for('result_exports.csv', import_job_id=job.id) }}"><i class="bi bi-filetype-csv" aria-hidden="true"></i> Download CSV</a>
+            <a class="btn btn-outline-dark" href="{{ url_for('result_exports.json', import_job_id=job.id) }}"><i class="bi bi-braces" aria-hidden="true"></i> Download JSON</a>
+        </div>
+        {% else %}
+        <span class="text-secondary">Run validation to enable exports.</span>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body p-4">
+                <h2 class="h5">Report identity</h2>
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">University</dt><dd class="col-sm-8">{{ report.university }}</dd>
+                    <dt class="col-sm-4">Programme</dt><dd class="col-sm-8">{{ report.programme }}</dd>
+                    <dt class="col-sm-4">Branch</dt><dd class="col-sm-8">{{ report.branch or 'Not printed' }}</dd>
+                    <dt class="col-sm-4">Semester</dt><dd class="col-sm-8">{{ report.semester or 'Not printed' }}</dd>
+                    <dt class="col-sm-4">Exam session</dt><dd class="col-sm-8">{{ report.examination_session or 'Not printed' }}{% if report.examination_type %} · {{ report.examination_type }}{% endif %}</dd>
+                    <dt class="col-sm-4">Institute</dt><dd class="col-sm-8 mb-0">{{ report.institute_code or '' }} {{ report.institute_name or '' }}</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body p-4">
+                <h2 class="h6 text-uppercase text-secondary">Extraction details</h2>
+                <dl class="mb-0">
+                    <dt>Pages</dt><dd>{{ job.page_count }}</dd>
+                    <dt>Parser</dt><dd>{{ report.parser_name }} v{{ report.parser_version }}</dd>
+                    <dt>Calculation rules</dt><dd>{{ report.calculation_rule_version or 'Not run' }}</dd>
+                    <dt>Maximum marks</dt><dd>{{ report.maximum_marks or 'Not printed' }}</dd>
+                    <dt>Maximum credits</dt><dd>{{ report.maximum_credits or 'Not printed' }}</dd>
+                    <dt>Source file size</dt><dd class="mb-0">{{ job.size_label }}</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white border-0 pt-4 px-4">
+        <h2 class="h5 mb-1">Detected subject structure</h2>
+        <p class="text-secondary small mb-0">Subjects and assessment maxima come from this PDF, not a fixed branch template.</p>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr><th>#</th><th>Code</th><th>Subject</th><th>Credits</th><th>Assessment structure</th><th>Total</th></tr>
+            </thead>
+            <tbody>
+            {% for subject in report.subjects %}
+                <tr>
+                    <td>{{ subject.display_order }}</td>
+                    <td class="font-monospace small">{{ subject.subject_code }}</td>
+                    <td>{{ subject.subject_name }}</td>
+                    <td>{{ subject.credits if subject.credits is not none else '—' }}</td>
+                    <td>
+                        {% if subject.assessments %}
+                            {% for assessment in subject.assessments %}
+                                <span class="badge text-bg-light border">{{ assessment.display_name }} {{ assessment.maximum_marks }}{% if assessment.minimum_marks is not none %}/{{ assessment.minimum_marks }}{% endif %}</span>
+                            {% endfor %}
+                        {% else %}
+                            <span class="text-secondary">Grade only</span>
+                        {% endif %}
+                    </td>
+                    <td>{% if subject.is_audit %}Audit{% else %}{{ subject.total_maximum }}/{{ subject.total_minimum }}{% endif %}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white border-0 pt-4 px-4">
+        <h2 class="h5 mb-1">Extracted student sample</h2>
+        <p class="text-secondary small mb-0">Showing the first 10 records. Reported values remain unchanged; calculated values are stored separately.</p>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light"><tr><th>Seat number</th><th>Name</th><th>Result</th><th>Validation</th><th>SGPA (R / C)</th><th>Total marks (R / C)</th></tr></thead>
+            <tbody>
+            {% for student in report.students[:10] %}
+                <tr>
+                    <td class="font-monospace">{{ student.seat_number }}</td>
+                    <td>{{ student.name }}</td>
+                    <td><span class="badge text-bg-{{ 'success' if student.result_status == 'PASS' else ('danger' if student.result_status == 'FAIL' else 'secondary') }}">{{ student.result_status }}</span></td>
+                    <td><span class="badge text-bg-{{ {'VALID': 'success', 'WARNING': 'warning', 'ERROR': 'danger', 'SKIPPED': 'secondary'}.get(student.validation_status, 'secondary') }}">{{ student.validation_status.replace('_', ' ') }}</span></td>
+                    <td>{{ student.summary.reported_sgpa if student.summary and student.summary.reported_sgpa is not none else '—' }} / {{ student.summary.calculated_sgpa if student.summary and student.summary.calculated_sgpa is not none else '—' }}</td>
+                    <td>{{ student.summary.reported_total_marks if student.summary and student.summary.reported_total_marks is not none else '—' }} / {{ student.summary.calculated_total_marks if student.summary and student.summary.calculated_total_marks is not none else '—' }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h2 class="h5">No extracted records yet</h2>
+                <p class="text-secondary mb-0">The PDF is stored safely, but no academic rows have been committed for this import.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h2 class="h6 text-uppercase text-secondary">File details</h2>
+                <dl class="mb-0">
+                    <dt>Size</dt><dd>{{ job.size_label }}</dd>
+                    <dt>SHA-256</dt><dd class="font-monospace small text-break">{{ job.file_hash }}</dd>
+                    <dt>Uploaded</dt><dd class="mb-0">{{ job.created_at.strftime('%d %b %Y, %H:%M UTC') }}</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<section class="danger-zone mt-4" data-reveal>
+    <details>
+        <summary><i class="bi bi-trash3" aria-hidden="true"></i> Delete this import</summary>
+        <div class="danger-zone-body">
+            <h2 class="h6">Permanent deletion</h2>
+            <p class="text-secondary small">This removes the uploaded PDF, extracted students, subject results, validation findings, and correction history. Export anything you must retain first. This action cannot be undone.</p>
+            <form class="row g-3 align-items-end" method="post" action="{{ url_for('result_imports.delete', import_job_id=job.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="col-lg-8"><label class="form-label" for="confirm_import_id">Type <strong>{{ job.id }}</strong> to confirm</label><input class="form-control" id="confirm_import_id" name="confirm_import_id" inputmode="numeric" autocomplete="off" required></div>
+                <div class="col-lg-4 d-grid"><button class="btn btn-danger" type="submit"><i class="bi bi-trash3" aria-hidden="true"></i> Permanently delete import</button></div>
+            </form>
+        </div>
+    </details>
+</section>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "result_data/base.html" %}
+{% block title %}Upload University Result | ECE Academic Records{% endblock %}
+{% block workspace_title %}Upload PDF{% endblock %}
+{% block content %}
+<header class="page-heading d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
+    <div><a class="back-link" href="{{ url_for('result_data.index') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> PDF imports</a><div class="eyebrow mt-3">Step 1 of 4</div><h1 class="display-title mb-2">Upload university result</h1><p class="page-subtitle mb-0">Add the official PDF. The source remains unchanged while a separate review dataset is prepared.</p></div>
+    <a class="btn btn-outline-primary" href="{{ url_for('result_imports.history') }}"><i class="bi bi-clock-history" aria-hidden="true"></i> View import history</a>
+</header>
+
+<div class="workflow-strip" aria-label="University result workflow">
+    <span class="workflow-step workflow-current"><span class="workflow-number">1</span><span class="workflow-copy"><strong>Upload PDF</strong><span>Select the official result file.</span></span></span>
+    <span class="workflow-step"><span class="workflow-number">2</span><span class="workflow-copy"><strong>Extract and validate</strong><span>Build records and run checks.</span></span></span>
+    <span class="workflow-step"><span class="workflow-number">3</span><span class="workflow-copy"><strong>Review and confirm</strong><span>Resolve exceptions and approve.</span></span></span>
+    <span class="workflow-step"><span class="workflow-number">4</span><span class="workflow-copy"><strong>Analyze and export</strong><span>Use the confirmed dataset.</span></span></span>
+</div>
+
+<div class="row g-4 align-items-start">
+    <div class="col-xl-8">
+        <section class="content-card">
+            <div class="section-heading"><div><div class="eyebrow">Source document</div><h2>Select result PDF</h2></div><span class="section-note">PDF · up to {{ config.MAX_UPLOAD_MB }} MB</span></div>
+            <form method="post" enctype="multipart/form-data" novalidate>
+                {{ form.hidden_tag() }}
+                <div class="upload-zone mb-4">
+                    <div class="d-flex align-items-start gap-3 mb-3"><div class="metric-icon metric-primary mb-0"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></div><div>{{ form.pdf_file.label(class="form-label fw-semibold d-block mb-1") }}<p class="small text-secondary mb-0">Use a machine-readable DBATU Crystal Reports file. Scanned images require OCR and are not accepted by this version.</p></div></div>
+                    {{ form.pdf_file(class="form-control", accept="application/pdf") }}
+                    {% for error in form.pdf_file.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="alert alert-info d-flex gap-3 align-items-start"><i class="bi bi-shield-check" aria-hidden="true"></i><div><strong>Faculty confirmation is required.</strong> Uploading does not mark records as final. Extracted values must be reviewed and confirmed first.</div></div>
+                <div class="d-flex flex-column flex-sm-row gap-2 justify-content-end"><a class="btn btn-outline-secondary" href="{{ url_for('result_data.index') }}">Cancel</a><button class="btn btn-primary" type="submit"><i class="bi bi-file-earmark-arrow-up" aria-hidden="true"></i> Upload and review</button></div>
+            </form>
+        </section>
+    </div>
+    <aside class="col-xl-4">
+        <section class="content-card">
+            <div class="section-heading"><div><div class="eyebrow">Before upload</div><h2>File checklist</h2></div></div>
+            <ul class="upload-checklist">
+                <li><i class="bi bi-check2" aria-hidden="true"></i><span>Use the complete official result PDF, not selected screenshots or pages.</span></li>
+                <li><i class="bi bi-check2" aria-hidden="true"></i><span>Confirm the branch, semester, and examination session printed in the file.</span></li>
+                <li><i class="bi bi-check2" aria-hidden="true"></i><span>After extraction, review flagged students before confirming the dataset.</span></li>
+            </ul>
+        </section>
+    </aside>
+</div>
+{% endblock %}

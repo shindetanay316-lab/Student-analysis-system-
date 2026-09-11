@@ -1,0 +1,10 @@
+{% extends "result_data/base.html" %}
+{% block title %}Not found - Result Data System{% endblock %}
+{% block content %}
+<div class="text-center py-5">
+    <div class="display-3 fw-bold text-primary">404</div>
+    <h1 class="h4">Page not found</h1>
+    <p class="text-secondary">The requested page or import does not exist.</p>
+    <a class="btn btn-primary" href="{{ url_for('result_data.index') }}">Return to dashboard</a>
+</div>
+{% endblock %}

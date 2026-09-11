@@ -1,0 +1,11 @@
+{% extends "result_data/base.html" %}
+{% block title %}Server error - Result Data System{% endblock %}
+{% block content %}
+<div class="empty-panel py-5" data-reveal>
+    <i class="bi bi-exclamation-octagon text-danger" aria-hidden="true"></i>
+    <div class="eyebrow">Error 500</div>
+    <h1 class="display-title h3">The request could not be completed</h1>
+    <p class="page-subtitle">Your data was not intentionally changed. Return to the dashboard and try again; if the problem continues, record the time and check the application logs.</p>
+    <a class="btn btn-primary" href="{{ url_for('result_data.index') }}"><i class="bi bi-grid-1x2" aria-hidden="true"></i> Return to dashboard</a>
+</div>
+{% endblock %}

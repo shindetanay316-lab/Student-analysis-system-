@@ -1,0 +1,10 @@
+{% extends "result_data/base.html" %}
+{% block title %}File too large - Result Data System{% endblock %}
+{% block content %}
+<div class="text-center py-5">
+    <div class="display-3 fw-bold text-danger">413</div>
+    <h1 class="h4">PDF is too large</h1>
+    <p class="text-secondary">The maximum allowed upload size is {{ max_upload_mb }} MB.</p>
+    <a class="btn btn-primary" href="{{ url_for('result_imports.upload') }}">Choose another PDF</a>
+</div>
+{% endblock %}

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title description">
+  <title id="title">Result Data System</title>
+  <desc id="description">Academic shield with a book and data bars</desc>
+  <defs>
+    <linearGradient id="shield" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#246BFD"/>
+      <stop offset="1" stop-color="#0B2B55"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#shield)" d="M32 3 56 12v17c0 15.4-9.6 25.2-24 32C17.6 54.2 8 44.4 8 29V12L32 3Z"/>
+  <path fill="#fff" d="M18 20.5c5.1-1.2 9.7-.4 14 2.3 4.3-2.7 8.9-3.5 14-2.3v19c-5.2-1.1-9.8-.3-14 2.5-4.2-2.8-8.8-3.6-14-2.5v-19Zm4 4.1v10.3c3.1-.1 5.8.5 8 1.7V26.3a15.7 15.7 0 0 0-8-1.7Zm20 0a15.7 15.7 0 0 0-8 1.7v10.3c2.2-1.2 4.9-1.8 8-1.7V24.6Z"/>
+  <path fill="#66D9E8" d="M23 16h4v4h-4zm7-4h4v8h-4zm7 2h4v6h-4z"/>
+</svg>

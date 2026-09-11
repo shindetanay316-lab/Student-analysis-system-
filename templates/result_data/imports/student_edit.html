@@ -1,0 +1,53 @@
+{% extends "result_data/base.html" %}
+{% block title %}Correct {{ student.seat_number }} | ECE Academic Records{% endblock %}
+{% block workspace_title %}Correct student record{% endblock %}
+{% block content %}
+<header class="page-heading d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3 mb-4" data-reveal>
+    <div><a class="back-link" href="{{ url_for('result_imports.student_detail', import_job_id=job.id, student_id=student.id) }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> Student review</a><div class="eyebrow mt-3">Audited correction</div><h1 class="display-title mb-1">Correct student record</h1><p class="page-subtitle mb-0">{{ student.name }} · <span class="font-monospace">{{ student.seat_number }}</span></p></div>
+    {% if job.status == 'READY' %}<span class="badge text-bg-warning fs-6">Saving will reopen review</span>{% endif %}
+</header>
+
+<div class="alert alert-info"><strong>Source evidence is protected.</strong> Values printed in the PDF remain in the raw fields and correction history. Only current reviewed values will change.</div>
+
+<form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="card border-0 shadow-sm mb-4"><div class="card-body p-4"><h2 class="h5 mb-3">Student identity and summary</h2><div class="row g-3">
+        <div class="col-lg-8"><label class="form-label" for="student_name">Student name</label><input class="form-control" id="student_name" name="student_name" maxlength="255" required value="{{ request.form.get('student_name', student.name) }}"></div>
+        <div class="col-lg-4"><label class="form-label" for="student_result_status">Reported result status</label><select class="form-select" id="student_result_status" name="student_result_status" required>{% set selected_result = request.form.get('student_result_status', student.result_status) %}{% for value in ['PASS', 'FAIL', 'CANCEL'] %}<option value="{{ value }}" {% if selected_result == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></div>
+        {% if student.summary %}
+        {% for attribute, label in [('reported_sgpa', 'Reported SGPA'), ('reported_total_grade_points', 'Reported total grade points'), ('reported_earned_credits', 'Reported earned credits'), ('reported_total_marks', 'Reported total marks')] %}
+        <div class="col-md-6 col-lg-3"><label class="form-label" for="summary_{{ attribute }}">{{ label }}</label><input class="form-control" inputmode="decimal" id="summary_{{ attribute }}" name="summary_{{ attribute }}" value="{{ request.form.get('summary_' ~ attribute, student.summary|attr(attribute) if student.summary|attr(attribute) is not none else '') }}"></div>
+        {% endfor %}
+        {% endif %}
+    </div></div></div>
+
+    {% for result in student.subject_results %}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white border-0 pt-4 px-4"><div class="d-flex flex-column flex-md-row justify-content-between gap-2"><div><h2 class="h5 mb-1">{{ result.subject.subject_code }} — {{ result.subject.subject_name }}</h2><p class="small text-secondary mb-0">{{ result.subject.credits }} credits · Current validation: {{ result.validation_status }}</p></div></div></div>
+        <div class="card-body p-4">
+        {% if result.subject.is_audit %}
+            <div class="row"><div class="col-md-4"><label class="form-label" for="result_audit_grade_{{ result.id }}">Audit grade</label><input class="form-control text-uppercase" id="result_audit_grade_{{ result.id }}" name="result_audit_grade_{{ result.id }}" maxlength="30" value="{{ request.form.get('result_audit_grade_' ~ result.id, result.audit_grade or '') }}"></div></div>
+        {% else %}
+            <div class="row g-3 mb-4">
+            {% for component in result.components %}
+                {% set component_default = component.numeric_value if component.numeric_value is not none else (component.special_code or '') %}
+                <div class="col-md-6 col-xl-4"><label class="form-label" for="component_value_{{ component.id }}">{{ component.assessment.display_name }}</label><div class="input-group"><input class="form-control" id="component_value_{{ component.id }}" name="component_value_{{ component.id }}" value="{{ request.form.get('component_value_' ~ component.id, component_default) }}"><span class="input-group-text">/ {{ component.assessment.maximum_marks }}</span></div><div class="form-text">PDF raw: <code>{{ component.raw_text }}</code>{% if component.assessment.minimum_marks is not none %} · Minimum {{ component.assessment.minimum_marks }}{% endif %}</div><div class="form-check mt-2"><input class="form-check-input" type="checkbox" value="1" id="component_carried_{{ component.id }}" name="component_carried_{{ component.id }}" {% if request.method == 'POST' and request.form.get('component_carried_' ~ component.id) == '1' or request.method == 'GET' and component.is_carried_forward %}checked{% endif %}><label class="form-check-label small" for="component_carried_{{ component.id }}">Carried forward</label></div></div>
+            {% endfor %}
+            </div>
+            {% set total_default = result.total_value if result.total_value is not none else (result.total_special_code or '') %}
+            <div class="row g-3">
+                <div class="col-md-6 col-xl-3"><label class="form-label" for="result_total_{{ result.id }}">Reported total</label><div class="input-group"><input class="form-control" id="result_total_{{ result.id }}" name="result_total_{{ result.id }}" value="{{ request.form.get('result_total_' ~ result.id, total_default) }}"><span class="input-group-text">/ {{ result.subject.total_maximum }}</span></div><div class="form-text">PDF raw: <code>{{ result.total_raw or 'blank' }}</code></div><div class="form-check mt-2"><input class="form-check-input" type="checkbox" value="1" id="result_total_carried_{{ result.id }}" name="result_total_carried_{{ result.id }}" {% if request.method == 'POST' and request.form.get('result_total_carried_' ~ result.id) == '1' or request.method == 'GET' and result.total_is_carried_forward %}checked{% endif %}><label class="form-check-label small" for="result_total_carried_{{ result.id }}">Carried forward</label></div></div>
+                <div class="col-md-6 col-xl-2"><label class="form-label" for="result_grade_{{ result.id }}">Grade</label><input class="form-control text-uppercase" id="result_grade_{{ result.id }}" name="result_grade_{{ result.id }}" maxlength="20" value="{{ request.form.get('result_grade_' ~ result.id, result.grade or '') }}"><div class="form-text">PDF raw: <code>{{ result.grade_raw or 'blank' }}</code></div></div>
+                <div class="col-md-4 col-xl-2"><label class="form-label" for="result_grade_point_{{ result.id }}">Grade point</label><input class="form-control" inputmode="decimal" id="result_grade_point_{{ result.id }}" name="result_grade_point_{{ result.id }}" value="{{ request.form.get('result_grade_point_' ~ result.id, result.grade_point if result.grade_point is not none else '') }}"></div>
+                <div class="col-md-4 col-xl-2"><label class="form-label" for="result_credit_points_{{ result.id }}">Credit points</label><input class="form-control" inputmode="decimal" id="result_credit_points_{{ result.id }}" name="result_credit_points_{{ result.id }}" value="{{ request.form.get('result_credit_points_' ~ result.id, result.credit_points if result.credit_points is not none else '') }}"></div>
+                <div class="col-md-4 col-xl-2"><label class="form-label" for="result_grace_marks_{{ result.id }}">Grace marks</label><input class="form-control" inputmode="decimal" id="result_grace_marks_{{ result.id }}" name="result_grace_marks_{{ result.id }}" value="{{ request.form.get('result_grace_marks_' ~ result.id, result.grace_marks if result.grace_marks is not none else '') }}"></div>
+            </div>
+        {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+
+    <div class="card border-primary shadow-sm mb-4"><div class="card-body p-4"><label class="form-label fw-semibold" for="reason">Correction reason</label><textarea class="form-control" id="reason" name="reason" rows="3" minlength="5" maxlength="500" required placeholder="Example: Verified against the university PDF on page 17.">{{ request.form.get('reason', '') }}</textarea><div class="form-text">Required. This explanation is saved permanently with every changed field.</div></div></div>
+    <div class="d-flex flex-column flex-sm-row justify-content-end gap-2"><a class="btn btn-outline-secondary" href="{{ url_for('result_imports.student_detail', import_job_id=job.id, student_id=student.id) }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Cancel</a><button class="btn btn-primary" type="submit"><i class="bi bi-check2-circle" aria-hidden="true"></i> Save corrections and revalidate</button></div>
+</form>
+{% endblock %}

@@ -1,0 +1,85 @@
+<aside class="sidebar workspace-sidebar" id="sidebar" aria-label="Primary navigation">
+    <div class="workspace-brand">
+        <a href="{{ url_for('index') }}" class="workspace-brand-link" aria-label="ECE Academic Records home">
+            <img src="{{ url_for('static', filename='images/right_logo.png') }}" alt="CSMSS College of Engineering crest" class="workspace-brand-logo">
+            <span class="workspace-brand-copy">
+                <strong>ECE Academic Records</strong>
+                <small>CSMSS College of Engineering</small>
+            </span>
+        </a>
+    </div>
+
+    <nav class="workspace-nav">
+        <section class="workspace-nav-group" aria-labelledby="workspace-heading">
+            <h2 id="workspace-heading">Workspace</h2>
+            <a class="workspace-nav-link {{ 'active' if shell_area == 'dashboard' else '' }}" href="{{ url_for('index') }}">
+                <i class="bi bi-house-door" aria-hidden="true"></i><span>Overview</span>
+            </a>
+            <a class="workspace-nav-link {{ 'active' if shell_area == 'internal' else '' }}" href="{{ url_for('ct1_page') }}">
+                <i class="bi bi-pencil-square" aria-hidden="true"></i><span>Internal marks</span>
+            </a>
+            <a class="workspace-nav-link {{ 'active' if shell_area == 'external' else '' }}" href="{{ url_for('external.external_marks_page') }}">
+                <i class="bi bi-card-checklist" aria-hidden="true"></i><span>External marks</span>
+            </a>
+            <a class="workspace-nav-link {{ 'active' if shell_area == 'lab' else '' }}" href="{{ url_for('lab.lab_marks_page') }}">
+                <i class="bi bi-beaker" aria-hidden="true"></i><span>Lab and project marks</span>
+            </a>
+            <a class="workspace-nav-link {{ 'active' if shell_area == 'attendance' else '' }}" href="{{ url_for('attendance.attendance_page') }}">
+                <i class="bi bi-calendar-check" aria-hidden="true"></i><span>Attendance</span>
+            </a>
+        </section>
+
+        <section class="workspace-nav-group" aria-labelledby="results-heading">
+            <h2 id="results-heading">University results</h2>
+            <a class="workspace-nav-link {{ 'active' if shell_area == 'result-imports' else '' }}" href="{{ url_for('result_data.index') }}">
+                <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i><span>PDF imports</span>
+            </a>
+            <a class="workspace-nav-link {{ 'active' if shell_area == 'result-analysis' else '' }}" href="{{ url_for('result_analysis.index') }}">
+                <i class="bi bi-bar-chart-line" aria-hidden="true"></i><span>Result analysis</span>
+            </a>
+            <a class="workspace-nav-link {{ 'active' if shell_area == 'import-history' else '' }}" href="{{ url_for('result_imports.history') }}">
+                <i class="bi bi-clock-history" aria-hidden="true"></i><span>Import history</span>
+            </a>
+        </section>
+
+        <section class="workspace-nav-group" aria-labelledby="reports-heading">
+            <h2 id="reports-heading">Reports</h2>
+            <a class="workspace-nav-link" href="{{ url_for('index', view='individual-report') }}">
+                <i class="bi bi-person-vcard" aria-hidden="true"></i><span>Individual report</span>
+            </a>
+            <a class="workspace-nav-link" href="{{ url_for('index', view='internal-report') }}">
+                <i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i><span>Internal marks report</span>
+            </a>
+            <a class="workspace-nav-link {{ 'active' if shell_area == 'analytics' else '' }}" href="{{ url_for('analytics.analytics_page') }}">
+                <i class="bi bi-graph-up" aria-hidden="true"></i><span>Academic analytics</span>
+            </a>
+        </section>
+
+        {% if current_user.role == 'ADMIN' %}
+        <section class="workspace-nav-group" aria-labelledby="admin-heading">
+            <h2 id="admin-heading">Administration</h2>
+            <a class="workspace-nav-link" href="{{ url_for('subjects.subjects_page') }}">
+                <i class="bi bi-journal-bookmark" aria-hidden="true"></i><span>Subjects</span>
+            </a>
+            <a class="workspace-nav-link" href="{{ url_for('electives.elective_assignment_page') }}">
+                <i class="bi bi-diagram-3" aria-hidden="true"></i><span>Elective assignment</span>
+            </a>
+            <a class="workspace-nav-link" href="{{ url_for('batches.batch_assignment_page') }}">
+                <i class="bi bi-people" aria-hidden="true"></i><span>Divisions and batches</span>
+            </a>
+        </section>
+        {% endif %}
+    </nav>
+
+    <div class="workspace-user">
+        <div class="workspace-user-avatar" aria-hidden="true">{{ current_user.username[:1]|upper }}</div>
+        <div class="workspace-user-copy">
+            <strong>{{ current_user.username }}</strong>
+            <span>{{ current_user.role|title }} · {{ shell_academic_year }}</span>
+        </div>
+        <a href="{{ url_for('logout') }}" class="workspace-signout" aria-label="Sign out" title="Sign out">
+            <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+        </a>
+    </div>
+</aside>
+<button class="workspace-scrim" type="button" aria-label="Close navigation" onclick="toggleSidebar()"></button>

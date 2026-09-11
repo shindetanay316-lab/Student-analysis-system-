@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#14283f">
+    <title>Sign in | ECE Academic Records</title>
+    <link rel="icon" href="{{ url_for('static', filename='images/right_logo.png') }}" type="image/png">
+    <style>
+        * { box-sizing: border-box; }
+        body { align-items: center; background: #f0f3f6; color: #172231; display: flex; font-family: Inter, "Segoe UI", Arial, sans-serif; justify-content: center; margin: 0; min-height: 100vh; padding: 28px; }
+        .login-shell { background: #fff; border: 1px solid #d8e0e8; border-radius: 10px; box-shadow: 0 14px 40px rgba(20,40,63,.11); display: grid; grid-template-columns: minmax(300px, .9fr) minmax(340px, 1.1fr); max-width: 880px; min-height: 490px; overflow: hidden; width: 100%; }
+        .identity-panel { background: #14283f; border-right: 5px solid #c89a3d; color: #fff; display: flex; flex-direction: column; justify-content: space-between; padding: 44px 38px 36px; }
+        .crest-row { align-items: center; display: flex; gap: 14px; }
+        .crest-row img { background: #fff; border-radius: 50%; height: 66px; object-fit: contain; padding: 3px; width: 66px; }
+        .college-name { color: #c8d2dd; font-size: 13px; line-height: 1.45; }
+        .identity-panel h1 { font-size: 28px; letter-spacing: -.03em; line-height: 1.2; margin: 44px 0 12px; }
+        .identity-panel p { color: #b8c5d1; font-size: 14px; line-height: 1.65; margin: 0; }
+        .department { border-top: 1px solid rgba(255,255,255,.13); color: #d7dfe7; font-size: 12px; line-height: 1.5; margin-top: 34px; padding-top: 18px; }
+        .login-panel { display: flex; flex-direction: column; justify-content: center; padding: 48px; }
+        .eyebrow { color: #8b2332; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+        .login-panel h2 { color: #14283f; font-size: 25px; letter-spacing: -.02em; margin: 8px 0 6px; }
+        .login-panel > p { color: #657284; font-size: 14px; line-height: 1.5; margin: 0 0 24px; }
+        .flash { border-left: 4px solid; border-radius: 5px; font-size: 13px; margin-bottom: 16px; padding: 10px 12px; }
+        .flash.error { background: #fff0f1; border-color: #a33b47; color: #862b36; }
+        .flash.success { background: #eef7f1; border-color: #2f6e51; color: #24583f; }
+        label { color: #394a5e; display: block; font-size: 13px; font-weight: 650; margin: 15px 0 7px; }
+        input { border: 1px solid #bfc9d4; border-radius: 5px; color: #172231; font: inherit; font-size: 15px; padding: 11px 12px; width: 100%; }
+        input:focus { border-color: #24557a; box-shadow: 0 0 0 3px rgba(36,85,122,.12); outline: none; }
+        button { background: #14283f; border: 0; border-radius: 5px; color: #fff; cursor: pointer; font-size: 14px; font-weight: 700; margin-top: 24px; padding: 12px; width: 100%; }
+        button:hover { background: #1d3857; }
+        .hint { color: #7b8794; font-size: 12px; margin-top: 17px; text-align: center; }
+        @media (max-width: 720px) { body { padding: 16px; } .login-shell { grid-template-columns: 1fr; } .identity-panel { border-bottom: 4px solid #c89a3d; border-right: 0; padding: 24px; } .identity-panel h1 { font-size: 22px; margin: 26px 0 8px; } .department { display: none; } .login-panel { padding: 30px 24px; } }
+    </style>
+</head>
+<body>
+    <main class="login-shell">
+        <section class="identity-panel" aria-label="Institution">
+            <div>
+                <div class="crest-row"><img src="{{ url_for('static', filename='images/right_logo.png') }}" alt="CSMSS College of Engineering crest"><span class="college-name">CSMSS Chh. Shahu<br>College of Engineering</span></div>
+                <h1>ECE Academic Records</h1>
+                <p>One workspace for internal assessment, attendance, university result PDFs, analysis, and departmental reports.</p>
+            </div>
+            <div class="department">Department of Electronics and Computer Engineering<br>Faculty access portal</div>
+        </section>
+        <section class="login-panel">
+            <div class="eyebrow">Authorized access</div>
+            <h2>Sign in</h2>
+            <p>Use your administrator or faculty account to continue.</p>
+            {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="flash {{ category }}" style="white-space:pre-line;">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+            <form method="POST" action="{{ url_for('login') }}">
+                <label for="username">Username</label><input type="text" id="username" name="username" autocomplete="username" required autofocus>
+                <label for="password">Password</label><input type="password" id="password" name="password" autocomplete="current-password" required>
+                <button type="submit">Sign in to workspace</button>
+            </form>
+            <div class="hint">Initial seeded account: admin / admin123</div>
+        </section>
+    </main>
+</body>
+</html>
