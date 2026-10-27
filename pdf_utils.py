@@ -392,6 +392,8 @@ def generate_ct1_pdf_report(meta, data):
 def _fmt_mark(v):
     if v is None:
         return ""
+    if v in ('Pending','Absent'):
+        return v
     fv = float(v)
     if fv == int(fv):
         return str(int(fv))

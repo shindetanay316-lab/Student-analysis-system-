@@ -39,11 +39,36 @@ SQLite is used automatically when `DATABASE_URL` is not set, so MySQL/PostgreSQL
 ## Tests
 
 ```bash
-python -m unittest discover -v
+python -m unittest discover -s tests -v
 ```
 
 The workflow suite uses a temporary SQLite database and does not modify the configured application database.
 
-## Important parser note
+## University result parser
 
-Parser version 1.1.0 supports text-based DBATU Crystal Reports with the known one- or two-ESE-row layouts, optional internal rows, variable subject/student counts, and wrapped subject names. Scanned/image-only PDFs and materially different report families need OCR or an additional parser adapter.
+Parser 2.0 detects subject columns, wrapped codes and assessment rows per page.
+It supports the supplied DBATU office/institute reports, Regular/Supply results,
+NEP codes, alternate electives, optional assessments and optional summary fields.
+It retains raw marks, carried-forward flags, absences, grace annotations, audit
+results and attempt sessions. Missing printed values stay unknown for review.
+
+For an existing installation, stop the app and run:
+
+```powershell
+.\.venv\Scripts\python.exe upgrade_result_parser.py
+```
+
+This backs up an existing SQLite database and creates an additive source-metadata
+table. It does not seed/reset subjects, accounts, marks or academic settings.
+See `PARSER_UPDATE.md` for installation and verification details.
+
+Scanned/image-only PDFs require OCR first. A different university/report family
+may require a separate adapter; successful parsing does not guarantee the source
+report's own marks and totals are consistent.
+
+## Faculty reports and interactive result analysis
+
+See `UNIVERSITY_REPORTS_UPDATE.md` for the approved PDF/Excel template, chart
+drill-downs and installation. Existing installations should run
+`python upgrade_university_reports.py` after copying updated source files.
+This creates the additive report-settings table without resetting records.

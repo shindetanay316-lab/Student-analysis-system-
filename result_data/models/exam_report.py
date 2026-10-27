@@ -81,3 +81,23 @@ class ExamReport(db.Model):
     @property
     def result_count(self) -> int:
         return sum(len(student.subject_results) for student in self.students)
+
+    source_data = db.relationship(
+        "ResultSourceData", back_populates="report", cascade="all, delete-orphan",
+        single_parent=True, uselist=False,
+    )
+
+    def subject_codes_for_page(self, page):
+        """Legacy reports used one common matrix; new reports retain each page."""
+        if self.source_data is not None:
+            return self.source_data.data.get("page_subject_codes", {}).get(str(page), [])
+        return [subject.subject_code for subject in self.subjects]
+
+    def additional_summary_for(self, seat_number):
+        if self.source_data is None:
+            return {}
+        return self.source_data.data.get("additional_summaries", {}).get(seat_number, {})
+
+    @property
+    def expected_result_count(self):
+        return sum(len(self.subject_codes_for_page(student.source_page)) for student in self.students)

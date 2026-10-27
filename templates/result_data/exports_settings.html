@@ -1,0 +1,13 @@
+{% extends 'result_data/base.html' %}
+{% block title %}Report settings | University results{% endblock %}
+{% block workspace_title %}Report settings{% endblock %}
+{% block content %}
+<a class="back-link" href="{{ url_for('result_analysis.dashboard',import_job_id=job.id) }}">Back to analysis</a>
+<header class="page-heading mt-3"><div><h1 class="display-title">University report settings</h1><p class="page-subtitle">Faculty and signature names apply to this import's PDF and Excel workbook.</p></div></header>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<section class="content-card mb-4"><div class="section-heading"><h2>Report date and signatures</h2></div>
+<div class="row g-3"><div class="col-md-4"><label class="form-label" for="report-date">Report date</label><input id="report-date" type="date" name="report_date" class="form-control" value="{{ options.report_date }}" required></div></div>
+<div class="row g-3 mt-1">{% for key,label in signatures %}<div class="col-md-6"><label class="form-label" for="sign-{{ key }}">{{ label }}</label><input id="sign-{{ key }}" name="signature_{{ key }}" class="form-control" maxlength="150" value="{{ options.signatures.get(key,'') }}"></div>{% endfor %}</div></section>
+<section class="content-card mb-4"><div class="section-heading"><h2>Subject faculty</h2></div><div class="row g-3">{% for subject in job.report.subjects %}<div class="col-md-6"><label class="form-label" for="faculty-{{ subject.id }}">{{ subject.subject_name }} <span class="small text-secondary">({{ subject.subject_code }})</span></label><input id="faculty-{{ subject.id }}" class="form-control" name="faculty_{{ subject.id }}" maxlength="200" value="{{ options.faculty.get(subject.subject_code,'') }}"></div>{% endfor %}</div></section>
+<div class="d-flex gap-3"><button class="btn btn-primary">Save report settings</button><a class="btn btn-outline-primary" href="{{ url_for('result_exports.pdf',import_job_id=job.id) }}">Download PDF</a><a class="btn btn-outline-primary" href="{{ url_for('result_exports.excel',import_job_id=job.id) }}">Download Excel</a></div>
+</form>{% endblock %}

@@ -56,6 +56,7 @@
                 <div class="panel-body">
                     {% if current_user.role == 'ADMIN' %}
                     <form method="POST" action="/attendance/upload-timetable" enctype="multipart/form-data" class="form-grid form-grid-2" style="align-items:end;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="form-group">
                             <label class="form-label">Upload Filled Timetable Excel</label>
                             <input type="file" name="timetable_file" accept=".xlsx" class="form-control" required>
@@ -123,6 +124,7 @@
                 </div>
                 <div class="panel-body">
                     <form method="POST" action="/attendance/upload" enctype="multipart/form-data" class="form-grid form-grid-2" style="align-items:end;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="form-group">
                             <label class="form-label">Filled Attendance Excel</label>
                             <input type="file" name="attendance_file" accept=".xlsx" class="form-control" required>

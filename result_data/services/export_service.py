@@ -20,7 +20,7 @@ from .excel_presentation_service import (
 )
 
 
-EXPORT_SCHEMA_VERSION = "1.0"
+EXPORT_SCHEMA_VERSION = "1.1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +31,19 @@ class ExportArtifact:
 
 
 def build_excel_export(job: ImportJob) -> ExportArtifact:
+    _require_report(job)
+    from .report_excel_service import build_faculty_workbook
+    return ExportArtifact(build_faculty_workbook(job), _filename(job, "xlsx"),
+                          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+def build_pdf_export(job: ImportJob) -> ExportArtifact:
+    _require_report(job)
+    from .report_pdf_service import build_faculty_pdf
+    return ExportArtifact(build_faculty_pdf(job), _filename(job, "pdf"), "application/pdf")
+
+
+def build_detailed_excel_export(job: ImportJob) -> ExportArtifact:
     report = _require_report(job)
     frames = _data_frames(report)
     stream = BytesIO()
@@ -193,7 +206,14 @@ def _students_frame(report: ExamReport) -> pd.DataFrame:
                 ),
             }
         )
-    return pd.DataFrame(rows, columns=_student_columns())
+    extra_columns = []
+    for row, student in zip(rows, report.students):
+        for key, value in report.additional_summary_for(student.seat_number).items():
+            column = "Source " + key.replace("_", " ").title()
+            if column not in extra_columns:
+                extra_columns.append(column)
+            row[column] = value.get("raw_text")
+    return pd.DataFrame(rows, columns=_student_columns() + extra_columns)
 
 
 def _subjects_frame(report: ExamReport) -> pd.DataFrame:
@@ -279,7 +299,16 @@ def _results_frame(report: ExamReport) -> pd.DataFrame:
                 }
             )
             rows.append(row)
-    return pd.DataFrame(rows, columns=_result_columns(component_types))
+    extra_columns = []
+    extras_by_seat = {student.seat_number: report.additional_summary_for(student.seat_number)
+                      for student in report.students}
+    for row in rows:
+        for key, value in extras_by_seat.get(row["Seat Number"], {}).items():
+            column = "Source " + key.replace("_", " ").title()
+            if column not in extra_columns:
+                extra_columns.append(column)
+            row[column] = value.get("raw_text")
+    return pd.DataFrame(rows, columns=_result_columns(component_types) + extra_columns)
 
 
 def _components_frame(report: ExamReport) -> pd.DataFrame:
@@ -610,6 +639,7 @@ def _json_payload(job: ImportJob, report: ExamReport) -> dict:
             "report_generated_at_raw": report.report_generated_at_raw,
             "calculation_rule_version": report.calculation_rule_version,
         },
+        "source_layouts": report.source_data.data if report.source_data else {},
         "subjects": [_json_subject(subject) for subject in report.subjects],
         "students": [_json_student(student) for student in report.students],
         "validation": {
@@ -665,6 +695,7 @@ def _json_student(student) -> dict:
         },
         "results": [_json_result(result) for result in student.subject_results],
         "summary": {
+            "additional_source_fields": student.report.additional_summary_for(student.seat_number),
             "reported": {
                 "sgpa": _number(summary.reported_sgpa if summary else None),
                 "total_grade_points": _number(

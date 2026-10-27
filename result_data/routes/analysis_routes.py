@@ -64,3 +64,26 @@ def dashboard(import_job_id: int):
         report=job.report,
         analysis=analysis,
     )
+
+
+@analysis_bp.get('/imports/<int:import_job_id>/records')
+@login_required
+def records(import_job_id):
+    from flask import request, abort
+    from math import ceil
+    from ..services.analysis_filter_service import filter_records
+    job = db.get_or_404(ImportJob, import_job_id)
+    if job.report is None:
+        return redirect(url_for('result_imports.detail', import_job_id=job.id))
+    try:
+        filtered = filter_records(job.report, request.args)
+    except ValueError as error:
+        abort(400, str(error))
+    pages = max(1, ceil(filtered['count']/25))
+    page = max(1,min(request.args.get('page',1,type=int),pages))
+    start = (page-1)*25
+    def page_url(number):
+        args=request.args.to_dict();args['page']=number
+        return url_for('result_analysis.records',import_job_id=job.id,**args)
+    return render_template('result_data/analysis/records.html',job=job,filtered=filtered,
+        records=filtered['records'][start:start+25],page=page,pages=pages,start=start,page_url=page_url)

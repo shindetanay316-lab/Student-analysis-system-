@@ -224,7 +224,7 @@ def add_analysis_sheet(workbook, job, report) -> None:
         sheet,
         detail_row,
         1,
-        "Top Performers",
+        "Top 10 Performers",
         ("Seat Number", "Student", "SGPA", "Total Marks", "Result"),
         [
             (
@@ -237,24 +237,6 @@ def add_analysis_sheet(workbook, job, report) -> None:
             for row in analysis["top_performers"]
         ],
     )
-    _write_table(
-        sheet,
-        detail_row,
-        8,
-        "Attention Required",
-        ("Seat Number", "Student", "SGPA", "Reason", "Validation"),
-        [
-            (
-                row["seat_number"],
-                row["name"],
-                row["sgpa"],
-                row["reason"],
-                row["validation_status"],
-            )
-            for row in analysis["attention_students"]
-        ],
-    )
-
     validation_row = detail_row
     _write_table(
         sheet,

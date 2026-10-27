@@ -740,11 +740,21 @@
         }
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
         const semSelect = document.getElementById('semSelect');
-        if (semSelect.options.length > 1) {
+        const params = new URLSearchParams(window.location.search);
+        const selected = (params.get('semester_id') || '') + '|' + (params.get('academic_year') || '');
+        if (Array.from(semSelect.options).some(option => option.value === selected)) {
+            semSelect.value = selected;
+        } else if (semSelect.options.length > 1) {
             semSelect.selectedIndex = semSelect.options.length - 1;
-            fetchSemesterData();
+        }
+        if (semSelect.value) await fetchSemesterData();
+        const code = params.get('subject_code');
+        const subjectSelect = document.getElementById('subSelect');
+        if (code && Array.from(subjectSelect.options).some(option => option.value === code)) {
+            subjectSelect.value = code;
+            await fetchSubjectData();
         }
     });
 </script>

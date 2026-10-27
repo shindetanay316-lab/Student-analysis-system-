@@ -107,7 +107,7 @@ After login:
 2. Use **Administration** to verify subjects, electives, divisions, and batches.
 3. Record internal, external, lab, and attendance data from **Workspace**.
 4. Open **PDF imports** under **University results**.
-5. Select **Upload PDF** and upload one text-based DBATU result report for one branch and one semester. Parser version 1.1.0 supports the known one- and two-ESE-row Crystal Report layouts and wrapped subject names.
+5. Select **Upload PDF** and upload one text-based DBATU result report for one branch and one semester. Parser 2.0 detects each page's subjects and assessments, including short/wrapped codes, alternate electives, office records and optional summary columns.
 6. Extract the PDF, review validation findings, and correct any extracted value with a reason.
 7. Re-run validation and confirm the dataset.
 8. Open **Result analysis** or export Excel/CSV/JSON.
@@ -171,7 +171,7 @@ Uploaded result PDFs and the database must be stored on persistent storage. Back
 - **`python` not found:** install Python 3.11/3.12 and enable “Add Python to PATH”.
 - **Activation is blocked on Windows:** use `.venv\Scripts\python.exe app.py` directly.
 - **Database connection refused:** remove `DATABASE_URL` to use SQLite, or verify the MySQL/PostgreSQL service and credentials.
-- **PDF extraction failed:** confirm the PDF contains selectable text and is a DBATU Crystal Report. The parser adapts to known assessment-row variations, but scanned PDFs require OCR and materially different report families require another parser adapter.
+- **PDF extraction failed:** confirm the PDF contains selectable text and is a DBATU Crystal Report. The parser detects variable subject/assessment columns and retains optional summary fields. Scanned PDFs require OCR and a different report family may require another adapter.
 - **Duplicate PDF:** the source hash already exists; open the existing import from Import History.
 - **File too large:** increase `MAX_UPLOAD_MB` in `.env` and restart the server.
 - **Port 5000 is busy:** run `flask --app app run --port 5001` and open the new port.

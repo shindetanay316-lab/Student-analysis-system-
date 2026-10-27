@@ -1,0 +1,22 @@
+{% extends 'result_data/base.html' %}
+{% block title %}{{ filtered.label }} | University results{% endblock %}
+{% block workspace_title %}Filtered records{% endblock %}
+{% block content %}
+<a class="back-link" href="{{ url_for('result_analysis.dashboard',import_job_id=job.id) }}">Back to analysis</a>
+<header class="page-heading mt-3"><div><div class="eyebrow">Chart selection</div><h1 class="display-title">{{ filtered.label }}</h1>
+<p class="page-subtitle">{{ filtered.count }} {{ 'student-subject records' if filtered.results_view else 'students' }}{% if filtered.results_view %} from {{ filtered.student_count }} students{% endif %}</p></div></header>
+<section class="content-card">
+<form method="get" class="row g-3 align-items-end mb-4">
+<input type="hidden" name="kind" value="{{ filtered.kind }}"><input type="hidden" name="value" value="{{ filtered.value }}">
+{% if filtered.measure %}<input type="hidden" name="measure" value="{{ filtered.measure }}">{% endif %}
+<div class="col-md-6"><label for="record-search" class="form-label">Search PRN, student or subject</label><input id="record-search" class="form-control" name="q" value="{{ filtered.q }}" maxlength="200"></div>
+{% if filtered.kind=='subject' %}<div class="col-md-3"><label class="form-label" for="outcome">Subject result</label><select id="outcome" name="outcome" class="form-select"><option value="">All</option><option value="PASS" {% if filtered.outcome=='PASS' %}selected{% endif %}>Passed</option><option value="FAIL" {% if filtered.outcome=='FAIL' %}selected{% endif %}>Failed</option></select></div>{% endif %}
+<div class="col-md-3 d-flex gap-2"><button class="btn btn-primary">Apply</button><a class="btn btn-outline-secondary" href="{{ url_for('result_analysis.records',import_job_id=job.id) }}">Clear filter</a></div>
+</form>
+{% if filtered.results_view %}<p class="small text-secondary">Each row belongs to one student and one subject. A student can appear more than once. Only records contributing to the selected chart are shown.</p>{% endif %}
+<div class="table-responsive"><table class="table professional-table align-middle"><thead><tr><th>Sr. No.</th><th>PRN</th><th>Student Name</th>{% if filtered.results_view %}<th>Subject Name</th><th>Grade</th><th>{{ 'Component marks / maximum' if filtered.kind=='component' else 'Marks' }}</th>{% endif %}<th>Result</th><th>SGPA</th><th>Validation</th></tr></thead><tbody>
+{% for row in records %}<tr><td>{{ start+loop.index }}</td><td class="font-monospace">{{ row.seat_number }}</td><td><a href="{{ url_for('result_imports.student_detail',import_job_id=job.id,student_id=row.id) }}">{{ row.name }}</a></td>{% if filtered.results_view %}<td>{{ row.subject_name }}</td><td>{{ row.grade or '—' }}</td><td>{% if filtered.kind=='component' %}{{ row.component_marks }} / {{ row.component_maximum }}{% else %}{{ row.marks if row.marks is not none else '—' }}{% endif %}</td>{% endif %}<td>{{ row.result_status }}</td><td>{{ '%.2f'|format(row.sgpa) if row.sgpa is not none else '—' }}</td><td>{{ row.validation_status }}</td></tr>{% else %}<tr><td colspan="10" class="text-center py-5">No matching records.</td></tr>{% endfor %}
+</tbody></table></div>
+<nav class="d-flex align-items-center justify-content-between mt-3" aria-label="Filtered results pages"><span>Page {{ page }} of {{ pages }}</span><div class="d-flex gap-2">{% if page>1 %}<a class="btn btn-sm btn-outline-primary" href="{{ page_url(page-1) }}">Previous</a>{% endif %}{% if page<pages %}<a class="btn btn-sm btn-outline-primary" href="{{ page_url(page+1) }}">Next</a>{% endif %}</div></nav>
+</section>
+{% endblock %}

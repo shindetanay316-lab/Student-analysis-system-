@@ -56,6 +56,11 @@ class ImportJob(db.Model):
     )
     confirmed_by = db.relationship("User", foreign_keys=[confirmed_by_id])
 
+    report_settings = db.relationship(
+        "ResultReportSettings", back_populates="import_job", cascade="all, delete-orphan",
+        single_parent=True, uselist=False,
+    )
+
     @property
     def size_label(self) -> str:
         size = self.file_size_bytes

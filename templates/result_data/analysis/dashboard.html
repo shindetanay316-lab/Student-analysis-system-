@@ -4,13 +4,15 @@
 {% block content %}
 <div class="page-heading d-flex flex-column flex-xl-row justify-content-between align-items-xl-end gap-3 mb-4" data-reveal>
     <div>
-        <a class="back-link" href="{{ url_for('result_imports.detail', import_job_id=job.id) }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> Import #{{ job.id }}</a>
-        <div class="eyebrow mt-3">Confirmed university dataset</div>
+        <a class="back-link" href="{{ url_for('result_imports.detail', import_job_id=job.id) }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> Import details</a>
+        <div class="eyebrow mt-3">University result dataset</div>
         <h1 class="display-title mb-2">University result analysis</h1>
         <p class="page-subtitle mb-0">{{ report.branch or report.programme }} · Semester {{ report.semester or '—' }} · {{ report.examination_session or 'Session not printed' }}</p>
     </div>
     <div class="d-flex flex-wrap gap-2">
         <a class="btn btn-outline-primary" href="{{ url_for('result_imports.students', import_job_id=job.id) }}"><i class="bi bi-people" aria-hidden="true"></i> Review students</a>
+        <a class="btn btn-outline-primary" href="{{ url_for('result_exports.pdf', import_job_id=job.id) }}">PDF report</a>
+        <a class="btn btn-outline-primary" href="{{ url_for('result_exports.settings', import_job_id=job.id) }}">Report settings</a>
         <a class="btn btn-primary" href="{{ url_for('result_exports.excel', import_job_id=job.id) }}"><i class="bi bi-file-earmark-excel" aria-hidden="true"></i> Export Excel</a>
     </div>
 </div>
@@ -35,17 +37,17 @@
     {% set metrics = [
         ('Students', analysis.summary.students, 'bi-people', 'primary', analysis.summary.subjects ~ ' subjects in this report'),
         ('Pass rate', (analysis.summary.pass_rate ~ '%') if analysis.summary.pass_rate is not none else '—', 'bi-mortarboard', 'success', 'Declared pass/fail results'),
-        ('Average SGPA', analysis.summary.average_sgpa if analysis.summary.average_sgpa is not none else '—', 'bi-graph-up-arrow', 'info', 'Calculated value preferred'),
-        ('Highest SGPA', analysis.summary.highest_sgpa if analysis.summary.highest_sgpa is not none else '—', 'bi-award', 'warning', analysis.summary.completion_rate ~ '% record completion')
+        ('Average SGPA', analysis.summary.average_sgpa if analysis.summary.average_sgpa is not none else '—', 'bi-graph-up-arrow', 'info', 'Reviewed university SGPA'),
+        ('Highest SGPA', analysis.summary.highest_sgpa if analysis.summary.highest_sgpa is not none else '—', 'bi-award', 'warning', analysis.summary.highest_student_names or 'No reported SGPA available')
     ] %}
     {% for label, value, icon, tone, context in metrics %}
     <div class="col-6 col-xl-3">
-        <article class="metric-card metric-{{ tone }} h-100">
+        <a class="metric-card metric-{{ tone }} h-100 d-block text-decoration-none" href="{{ url_for('result_analysis.records', import_job_id=job.id, kind='highest' if label=='Highest SGPA' else 'result' if label=='Pass rate' else 'all', value='PASS' if label=='Pass rate' else '') }}">
             <div class="metric-icon"><i class="bi {{ icon }}" aria-hidden="true"></i></div>
             <div class="metric-label">{{ label }}</div>
             <div class="metric-value">{{ value }}</div>
             <div class="metric-context">{{ context }}</div>
-        </article>
+        </a>
     </div>
     {% endfor %}
 </div>
@@ -55,7 +57,7 @@
         <section class="content-card h-100">
             <div class="section-heading">
                 <div><div class="eyebrow">Distribution</div><h2>SGPA profile</h2></div>
-                <span class="section-note">{{ analysis.summary.summaries }} student summaries</span>
+                <span class="section-note">Click a bar to view students</span>
             </div>
             <div class="chart-wrap chart-wrap-lg"><canvas id="sgpaChart" role="img" aria-label="Number of students in each SGPA range"></canvas></div>
         </section>
@@ -73,10 +75,10 @@
         <section class="content-card h-100">
             <div class="section-heading">
                 <div><div class="eyebrow">Subject comparison</div><h2>Subject performance</h2></div>
-                <span class="section-note">Average marks and pass rate (%)</span>
+                <span class="section-note">Click a bar to view matching records</span>
             </div>
             {% if analysis.subject_performance %}
-            <div class="chart-wrap chart-wrap-subject"><canvas id="subjectChart" role="img" aria-label="Average mark percentage and pass rate by subject"></canvas></div>
+            <div class="chart-wrap chart-wrap-subject" style="height:{{ [420, analysis.subject_performance|length * 80]|max }}px"><canvas id="subjectChart" role="img" aria-label="Average mark percentage and pass rate by subject"></canvas></div>
             {% else %}<div class="empty-panel"><i class="bi bi-bar-chart" aria-hidden="true"></i><p>No scored subjects are available.</p></div>{% endif %}
         </section>
     </div>
@@ -107,32 +109,23 @@
     </div>
 </div>
 
-<div class="row g-4">
-    <div class="col-xl-6" data-reveal>
-        <section class="content-card h-100">
-            <div class="section-heading"><div><div class="eyebrow">Merit view</div><h2>Top performers</h2></div></div>
-            {% if analysis.top_performers %}
-            <div class="table-responsive"><table class="table professional-table align-middle mb-0"><thead><tr><th>Student</th><th>SGPA</th><th>Total marks</th><th></th></tr></thead><tbody>
-                {% for student in analysis.top_performers %}<tr><td><strong>{{ student.name }}</strong><div class="table-meta">{{ student.seat_number }}</div></td><td><span class="score-chip">{{ student.sgpa }}</span></td><td>{{ student.total_marks if student.total_marks is not none else '—' }}</td><td class="text-end"><a class="icon-link" aria-label="Review {{ student.name }}" href="{{ url_for('result_imports.student_detail', import_job_id=job.id, student_id=student.id) }}"><i class="bi bi-arrow-up-right" aria-hidden="true"></i></a></td></tr>{% endfor %}
-            </tbody></table></div>
-            {% else %}<div class="empty-panel"><p>No SGPA values are available.</p></div>{% endif %}
-        </section>
-    </div>
-    <div class="col-xl-6" data-reveal>
-        <section class="content-card h-100">
-            <div class="section-heading"><div><div class="eyebrow">Intervention view</div><h2>Students requiring attention</h2></div></div>
-            {% if analysis.attention_students %}
-            <div class="table-responsive"><table class="table professional-table align-middle mb-0"><thead><tr><th>Student</th><th>SGPA</th><th>Reason</th><th></th></tr></thead><tbody>
-                {% for student in analysis.attention_students %}<tr><td><strong>{{ student.name }}</strong><div class="table-meta">{{ student.seat_number }}</div></td><td><span class="score-chip score-chip-alert">{{ student.sgpa }}</span></td><td>{{ student.reason }}</td><td class="text-end"><a class="icon-link" aria-label="Review {{ student.name }}" href="{{ url_for('result_imports.student_detail', import_job_id=job.id, student_id=student.id) }}"><i class="bi bi-arrow-up-right" aria-hidden="true"></i></a></td></tr>{% endfor %}
-            </tbody></table></div>
-            {% else %}<div class="empty-panel"><p>No student summaries require display.</p></div>{% endif %}
-        </section>
-    </div>
-</div>
-
+<section class="content-card mb-4" data-reveal>
+<div class="section-heading"><div><div class="eyebrow">Merit view</div><h2>Top 10 performers</h2></div><span class="section-note">Passed students with a reported SGPA</span></div>
+<div class="table-responsive"><table class="table professional-table align-middle mb-0"><thead><tr><th>Sr. No.</th><th>PRN</th><th>Student Name</th><th>Rank</th><th>SGPA</th></tr></thead><tbody>
+{% for student in analysis.top_performers %}<tr><td>{{ loop.index }}</td><td class="font-monospace">{{ student.seat_number }}</td><td><a href="{{ url_for('result_imports.student_detail',import_job_id=job.id,student_id=student.id) }}">{{ student.name }}</a></td><td>{{ student.rank }}</td><td><span class="score-chip">{{ '%.2f'|format(student.sgpa) }}</span></td></tr>{% else %}<tr><td colspan="5" class="text-center py-4">No eligible reported SGPA values.</td></tr>{% endfor %}
+</tbody></table></div>
+</section>
+<section class="content-card mb-4"><div class="section-heading"><div><h2>Browse chart records</h2><p>Select a category here or click its chart above.</p></div><a href="{{ url_for('result_analysis.records',import_job_id=job.id) }}">All students</a></div>
+<div class="d-flex gap-2 flex-wrap">{% for row in analysis.result_status %}<a class="btn btn-outline-primary" href="{{ url_for('result_analysis.records',import_job_id=job.id,kind='result',value=row.key) }}">{{ row.label }}: {{ row.count }}</a>{% endfor %}</div>
+<details class="mt-3"><summary class="text-primary">More chart filters</summary><div class="row g-3 mt-1">
+{% for kind,label,items in [('sgpa','SGPA range',analysis.sgpa_distribution),('validation','Validation status',analysis.validation_status),('subject','Subject',analysis.subject_performance),('grade','Grade',analysis.grade_distribution),('component','Assessment component',analysis.component_performance)] %}
+<form method="get" action="{{ url_for('result_analysis.records',import_job_id=job.id) }}" class="col-md-6"><input type="hidden" name="kind" value="{{ kind }}"><label class="form-label" for="filter-{{ kind }}">{{ label }}</label><div class="d-flex gap-2"><select class="form-select" name="value" id="filter-{{ kind }}" {% if not items %}disabled{% endif %}>{% if not items %}<option>No records</option>{% endif %}{% for item in items %}<option value="{{ item.code if kind=='subject' else item.grade if kind=='grade' else item.key }}">{{ item.name if kind=='subject' else item.grade if kind=='grade' else item.component if kind=='component' else item.label }}</option>{% endfor %}</select><button class="btn btn-outline-primary" {% if not items %}disabled{% endif %}>View</button></div></form>
+{% endfor %}</div></details>
+<p class="small text-secondary mt-3 mb-0">Result and validation charts count students. Grade and component charts count student-subject records. Pass rates use declared pass/fail outcomes; missing grades remain ungraded.</p></section>
+<div id="analysis-links" data-records-url="{{ url_for('result_analysis.records',import_job_id=job.id) }}"></div>
 <script id="analysis-data" type="application/json">{{ analysis|tojson }}</script>
 {% endblock %}
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+<script src="{{ url_for('static', filename='result_data/vendor/chart.umd.min.js') }}" defer></script>
 <script src="{{ url_for('static', filename='result_data/js/analysis.js') }}" defer></script>
 {% endblock %}

@@ -134,7 +134,12 @@ class WorkflowTestCase(unittest.TestCase):
     def _xlsx_upload(self, url, fields, payload, filename="upload.xlsx"):
         data = dict(fields)
         data[next(iter(payload))] = (io.BytesIO(next(iter(payload.values()))), filename)
-        return self.client.post(url, data=data, content_type="multipart/form-data", follow_redirects=False)
+        response=self.client.post(url, data=data, content_type="multipart/form-data", follow_redirects=False)
+        if response.status_code==302 and '/workflow/reviews/' in response.location:
+            page=self.client.get(response.location)
+            token=re.search(rb'name="csrf_token" value="([^"]+)"',page.data).group(1).decode()
+            response=self.client.post(response.location+'/confirm',data={'csrf_token':token})
+        return response
 
     def _fill_ct_template(self, response, marks):
         wb = load_workbook(io.BytesIO(response.data))
@@ -277,6 +282,87 @@ class WorkflowTestCase(unittest.TestCase):
         db.session.add(job)
         db.session.commit()
         return job
+
+    def _upload_adaptive_pdf(self, document):
+        pdf_bytes = document.tobytes()
+        document.close()
+        page = self.client.get("/result-data/imports/new")
+        token = re.search(rb'name="csrf_token"[^>]*value="([^"]+)"', page.data).group(1).decode()
+        response = self.client.post("/result-data/imports/new", data={
+            "csrf_token": token,
+            "pdf_file": (io.BytesIO(pdf_bytes), "adaptive-report.pdf"),
+        }, content_type="multipart/form-data", follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+        job = ResultImportJob.query.order_by(ResultImportJob.id.desc()).first()
+        self.assertEqual(job.status, "REVIEW_REQUIRED", job.error_message)
+        self.assertIsNotNone(job.report)
+        return job
+
+    def test_successful_pdf_upload_uses_result_upload_folder(self):
+        from test_adaptive_result_parser import fixture_document
+        job = self._upload_adaptive_pdf(fixture_document([5]))
+        self.assertEqual(job.parser_version, "2.0.1")
+        self.assertEqual(job.report.validation_error_count, 0)
+        self.assertEqual(len(job.report.students), 3)
+        self.assertTrue(os.path.isfile(os.path.join(app.config["RESULT_DATA_UPLOAD_FOLDER"], job.stored_filename)))
+        self.assertFalse(os.path.isfile(os.path.join(app.config["UPLOAD_FOLDER"], job.stored_filename)))
+
+    def test_pdf_electives_validation_coverage_and_reextraction(self):
+        from test_adaptive_result_parser import fixture_document
+        from result_data.services.acceptance_service import audit_import
+        from result_data.services.analysis_service import build_report_analysis
+        from result_data.services.extraction_service import extract_import_job
+        from result_data.models import ResultSourceData
+        job = self._upload_adaptive_pdf(fixture_document([3,4]))
+        self.assertEqual(len(job.report.subjects), 10)
+        self.assertEqual(job.report.validation_error_count, 0)
+        self.assertFalse(any(i.code == "MISSING_SUBJECT_RESULT" for i in job.report.validation_issues))
+        self.assertTrue(all(check.passed for check in audit_import(job)))
+        self.assertEqual(build_report_analysis(job.report)["summary"]["completion_rate"], 100)
+        self.assertEqual(job.report.expected_result_count, job.report.result_count)
+        for student in job.report.students:
+            response = self.client.get(f"/result-data/imports/{job.id}/students/{student.id}")
+            self.assertEqual(response.status_code, 200)
+        before = job.report.result_count
+        extract_import_job(job, app.config["RESULT_DATA_UPLOAD_FOLDER"])
+        self.assertEqual(job.report.result_count, before)
+        self.assertEqual(ResultSourceData.query.count(), 1)
+        for extension in ("xlsx", "csv", "json"):
+            response=self.client.get(f"/result-data/exports/imports/{job.id}/results.{extension}")
+            self.assertEqual(response.status_code, 200)
+
+    def test_optional_pdf_summary_fields_survive_database_and_exports(self):
+        from test_adaptive_result_parser import fixture_document
+        from result_data.services.export_service import build_json_export, build_csv_export, build_detailed_excel_export
+        import json
+        job = self._upload_adaptive_pdf(fixture_document([1]))
+        student = job.report.students[0]
+        detail = self.client.get(f"/result-data/imports/{job.id}/students/{student.id}")
+        self.assertIn(b"Ext Total(380)", detail.data)
+        self.assertIn(b"Int Total(370)", detail.data)
+        payload=json.loads(build_json_export(job).data)
+        fields=payload["students"][0]["summary"]["additional_source_fields"]
+        self.assertEqual(fields["external_total"]["raw_text"], "153")
+        self.assertEqual(fields["internal_total"]["raw_text"], "192")
+        self.assertIn(b"Source External Total", build_csv_export(job).data)
+        wb=load_workbook(io.BytesIO(build_detailed_excel_export(job).data))
+        self.assertTrue(any(cell.value == "Source Internal Total" for row in wb["Students"] for cell in row))
+        db.session.expire_all()
+        self.assertEqual(job.report.additional_summary_for(student.seat_number)["external_total"]["raw_text"], "153")
+
+    def test_reextract_failure_retains_previous_report(self):
+        from test_adaptive_result_parser import fixture_document
+        from result_data.services.extraction_service import extract_import_job, ExtractionFailedError
+        from result_data.parsers import PDFExtractionError
+        job = self._upload_adaptive_pdf(fixture_document([5]))
+        report_id, count = job.report.id, job.report.result_count
+        class BadParser:
+            def parse(self, path):
+                raise PDFExtractionError("Test invalid source")
+        with self.assertRaises(ExtractionFailedError):
+            extract_import_job(job, app.config["RESULT_DATA_UPLOAD_FOLDER"], BadParser())
+        self.assertEqual(job.report.id, report_id)
+        self.assertEqual(job.report.result_count, count)
 
     def test_authentication_and_role_protection(self):
         self.logout()
@@ -737,14 +823,18 @@ class WorkflowTestCase(unittest.TestCase):
             "marks": [{"student_id": "S001", "external_marks": 42}],
         })
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["saved"], 1)
-        self.assertFalse(ExternalMarks.query.filter_by(prn="S001").one().locked)
-        response = self.client.post("/external/lock", json={
-            "subject_code": "TH601", "semester_id": 6, "academic_year": "2025-26",
-        })
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["saved"], 0)
+        self.assertEqual(ExternalMarks.query.count(),0)
+        review_url=response.get_json()['review_url']
+        page=self.client.get(review_url)
+        token=re.search(rb'name="csrf_token" value="([^"]+)"',page.data).group(1).decode()
+        self.assertEqual(self.client.post(review_url+'/confirm',data={'csrf_token':token}).status_code,302)
         self.assertTrue(ExternalMarks.query.filter_by(prn="S001").one().locked)
+        response=self.client.post('/external/lock',json={'subject_code':'TH601','semester_id':6,'academic_year':'2025-26'})
+        self.assertEqual(response.status_code,409)
 
+        from coursework_models import AcceptedCourseworkMark
+        AcceptedCourseworkMark.query.delete()
         ExternalMarks.query.delete()
 
         Enrollment.query.filter_by(prn="S003", subject_code="TH601").delete()
@@ -753,7 +843,7 @@ class WorkflowTestCase(unittest.TestCase):
             "subject_code": "TH601", "semester_id": 6, "academic_year": "2025-26",
             "marks": [{"student_id": "S003", "external_marks": 40}],
         })
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["saved"], 0)
         self.assertTrue(response.get_json()["errors"])
         self.assertEqual(ExternalMarks.query.count(), 0)
@@ -761,7 +851,7 @@ class WorkflowTestCase(unittest.TestCase):
         response = self.client.post("/external/lock", json={
             "subject_code": "TH601", "semester_id": 6, "academic_year": "2025-26",
         })
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 409)
 
     def test_analytics_endpoints(self):
         self._complete_results()

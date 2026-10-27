@@ -15,3 +15,5 @@ reports/
 .coverage
 htmlcov/
 .DS_Store
+
+backups/

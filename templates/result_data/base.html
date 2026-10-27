@@ -15,7 +15,9 @@
 <body class="{{ 'authenticated-layout' if current_user.is_authenticated else 'guest-layout' }}">
     <a class="skip-link" href="#main-content">Skip to main content</a>
     {% if current_user.is_authenticated %}
-        {% if request.blueprint == 'result_analysis' %}
+        {% if request.blueprint in ['teaching','workflow','coursework'] or (request.endpoint == 'index' and current_user.role == 'TEACHER') %}
+            {% set shell_area = 'teaching' %}
+        {% elif request.blueprint == 'result_analysis' %}
             {% set shell_area = 'result-analysis' %}
         {% elif request.endpoint == 'result_imports.history' %}
             {% set shell_area = 'import-history' %}
@@ -29,7 +31,7 @@
                     <button class="sb-toggle" type="button" onclick="toggleSidebar()" aria-label="Open navigation"><i class="bi bi-list" aria-hidden="true"></i></button>
                     <div class="workspace-context">
                         <i class="bi bi-mortarboard" aria-hidden="true"></i>
-                        <span>University results</span><span aria-hidden="true">/</span>
+                        <span>{{ 'Workspace' if shell_area == 'teaching' else 'University results' }}</span><span aria-hidden="true">/</span>
                         <strong>{% block workspace_title %}PDF imports{% endblock %}</strong>
                     </div>
                 </div>

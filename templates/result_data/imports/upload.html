@@ -21,7 +21,7 @@
             <form method="post" enctype="multipart/form-data" novalidate>
                 {{ form.hidden_tag() }}
                 <div class="upload-zone mb-4">
-                    <div class="d-flex align-items-start gap-3 mb-3"><div class="metric-icon metric-primary mb-0"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></div><div>{{ form.pdf_file.label(class="form-label fw-semibold d-block mb-1") }}<p class="small text-secondary mb-0">Use a machine-readable DBATU Crystal Reports file. Scanned images require OCR and are not accepted by this version.</p></div></div>
+                    <div class="d-flex align-items-start gap-3 mb-3"><div class="metric-icon metric-primary mb-0"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></div><div>{{ form.pdf_file.label(class="form-label fw-semibold d-block mb-1") }}<p class="small text-secondary mb-0">Use a DBATU result PDF with selectable text. Subjects and assessment columns are detected separately on each page. Scanned images need OCR first.</p></div></div>
                     {{ form.pdf_file(class="form-control", accept="application/pdf") }}
                     {% for error in form.pdf_file.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
                 </div>

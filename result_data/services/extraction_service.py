@@ -10,6 +10,7 @@ from ..models import (
     Subject,
     SubjectAssessment,
     SubjectResult,
+    ResultSourceData,
 )
 from ..parsers import DBATUCrystalReportParser, PDFExtractionError, UnsupportedPDFError
 from .validation_service import validate_report
@@ -98,6 +99,15 @@ def _build_report(import_job: ImportJob, parsed) -> ExamReport:
         maximum_grade_points=parsed.maximum_grade_points,
         report_generated_at_raw=parsed.report_generated_at_raw,
     )
+    if parsed.page_subject_codes:
+        report.source_data = ResultSourceData(data={
+            "page_subject_codes": {str(page): codes for page, codes in parsed.page_subject_codes.items()},
+            "page_assessment_types": {str(page): subjects for page, subjects in parsed.page_assessment_types.items()},
+            "additional_summaries": {
+                student.seat_number: student.summary.additional_values
+                for student in parsed.students if student.summary.additional_values
+            },
+        })
 
     subjects_by_code: dict[str, Subject] = {}
     assessments_by_subject: dict[str, dict[str, SubjectAssessment]] = {}

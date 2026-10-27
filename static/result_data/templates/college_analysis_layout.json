@@ -1,0 +1,32 @@
+{
+  "width": 594.9600219726562,
+  "height": 842.0399780273438,
+  "signature_defaults": {
+    "coordinator": "Prof. J. N. Mohite",
+    "hod": "Dr. D. L. Bhuyar",
+    "dean": "Dr. K. N. Pathan",
+    "principal": "Dr. G. B. Dongre"
+  },
+  "faculty_defaults": {
+    "BTECPC601": "Prof. J. N. Mohite",
+    "BTECPC602": "Dr. P. G. Thombre",
+    "BTECPE603B": "Prof. B. R. Pawar",
+    "BTECPE603D": "Prof. A. V. Khake",
+    "BTECOE604C": "Prof. S. B. Dhumal",
+    "BTECHM605A": "Prof. G. N. Dhengle",
+    "BTECHM605B": "Dr. P. R. Wankhede",
+    "BTECPL606": "Prof. J. N. Mohite\n&\nDr. P. G. Thombre",
+    "BTECM607": "All GUIDES"
+  },
+  "subject_row_heights": {
+    "BTECPC601": 31.92,
+    "BTECPC602": 61.7,
+    "BTECPE603B": 31.92,
+    "BTECPE603D": 31.8,
+    "BTECOE604C": 31.92,
+    "BTECHM605A": 31.92,
+    "BTECHM605B": 47.91,
+    "BTECPL606": 89.16,
+    "BTECM607": 23.88
+  }
+}

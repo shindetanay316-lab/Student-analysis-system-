@@ -7,7 +7,7 @@ from .canonical import ParsedValue
 
 GRADE_PATTERN = re.compile(
     r"^(?P<grade_point>\d+(?:\.\d+)?)/"
-    r"(?P<grade>[A-Z]{2})/"
+    r"(?P<grade>[A-Z]{1,3})/"
     r"(?P<credit_points>\d+(?:\.\d+)?)"
     r"(?:\(G-(?P<grace>\d+(?:\.\d+)?)\))?$"
 )
@@ -70,7 +70,7 @@ def parse_grade(raw_text: str | None) -> ParsedGrade | None:
     if raw_text is None:
         return None
 
-    text = raw_text.strip()
+    text = re.sub(r"\s+", "", raw_text.strip().upper())
     match = GRADE_PATTERN.fullmatch(text)
     if not match:
         return None
@@ -92,3 +92,16 @@ def normalize_attempt(raw_text: str | None) -> str | None:
     text = re.sub(r"\s+", " ", raw_text.strip())
     text = re.sub(r"\s*-\s*", " - ", text)
     return text or None
+
+
+PRINTED_GRADES = {"EX","AA","AB","BB","BC","CC","CD","DD","DE","EE","FF","AU","S","US","PP","NP"}
+
+def grade_label(raw_text: str | None) -> str | None:
+    if not raw_text:return None
+    text=re.sub(r"\s+", "", raw_text.strip().upper())
+    parsed=parse_grade(text)
+    if parsed:return parsed.grade
+    if text in PRINTED_GRADES:return text
+    if text.startswith("(") and text.endswith(")") and text[1:-1] in PRINTED_GRADES:
+        return text[1:-1]
+    return None

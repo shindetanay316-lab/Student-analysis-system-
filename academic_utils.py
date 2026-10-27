@@ -111,7 +111,8 @@ def visible_subjects_query(semester_id=None, subject_types=None):
         )
     )
 
-    return query.order_by(Subject.semester_id, Subject.subject_code)
+    from teaching_access import scope_subjects
+    return scope_subjects(query,semester_id).order_by(Subject.semester_id, Subject.subject_code)
 
 
 def visible_theory_subjects_query(semester_id=None):
@@ -134,4 +135,5 @@ def attendance_subjects_query(semester_id=None):
     query = Subject.query.filter(Subject.is_active == True)
     if semester_id is not None:
         query = query.filter(Subject.semester_id == semester_id)
-    return query.order_by(Subject.semester_id, Subject.subject_code)
+    from teaching_access import scope_subjects
+    return scope_subjects(query,semester_id).order_by(Subject.semester_id, Subject.subject_code)

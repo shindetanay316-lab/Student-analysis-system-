@@ -54,6 +54,7 @@ class ParsedSummary:
     reported_earned_credits: Decimal | None = None
     reported_total_marks: Decimal | None = None
     reported_status: str | None = None
+    additional_values: dict = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -92,6 +93,8 @@ class ParsedReport:
     report_generated_at_raw: str | None
     subjects: list[ParsedSubject]
     students: list[ParsedStudent]
+    page_subject_codes: dict[int, list[str]] = field(default_factory=dict)
+    page_assessment_types: dict[int, dict[str, list[str]]] = field(default_factory=dict)
 
     @property
     def subject_result_count(self) -> int:

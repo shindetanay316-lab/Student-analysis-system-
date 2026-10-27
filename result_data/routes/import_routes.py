@@ -77,7 +77,7 @@ def upload():
             return redirect(url_for("result_imports.detail", import_job_id=error.import_job_id))
         else:
             try:
-                extract_import_job(job, current_app.config["UPLOAD_FOLDER"])
+                extract_import_job(job, current_app.config["RESULT_DATA_UPLOAD_FOLDER"])
             except ExtractionFailedError as error:
                 flash(f"PDF uploaded, but extraction failed: {error}", "danger")
             else:

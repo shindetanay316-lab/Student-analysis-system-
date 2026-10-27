@@ -1,0 +1,20 @@
+{% extends 'result_data/base.html' %}
+{% block title %}Request mark correction | ACADPULSE{% endblock %}
+{% block workspace_title %}Request mark correction{% endblock %}
+{% block content %}
+<h1>Request a mark correction</h1><p>{{ subject.subject_name }} · {{ context.academic_year }} · Semester {{ context.semester_id }}</p><p class="alert alert-info">This request does not change current marks. An administrator must review and approve it. Use normal submission for components with no declared mark.</p>
+<form method="post" class="card card-body" style="max-width:760px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% for key,value in context.items() %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+<label class="form-label" for="student">Student</label><select id="student" class="form-select mb-3" name="prn" required><option value="">Select student</option>{% for student in students %}<option value="{{ student.prn }}">{{ student.prn }} — {{ student.name }}</option>{% endfor %}</select>
+<label class="form-label" for="category">Assessment group</label><select id="category" class="form-select mb-3" name="category" required>{% for category in categories %}<option value="{{ category }}">{{ category }}</option>{% endfor %}</select>
+<label class="form-label" for="component">Component</label><select id="component" class="form-select mb-3" name="component" required>{% for category,components in categories.items() %}<optgroup label="{{ category }}">{% for component,spec in components.items() %}<option value="{{ component }}">{{ component }} /{{ spec[1] }}</option>{% endfor %}</optgroup>{% endfor %}</select>
+<label class="form-label" for="value">Proposed mark (or A for absent)</label><input id="value" class="form-control mb-3" name="new_value" required autocomplete="off">
+<label class="form-label" for="reason">Reason and supporting reference</label><textarea id="reason" class="form-control mb-3" name="reason" minlength="10" maxlength="1500" rows="4" required></textarea>
+<button class="btn btn-primary align-self-start">Submit correction request</button></form>
+{% endblock %}
+
+{% block scripts %}<script>
+const categoryOptions={{ categories|tojson }};
+const categorySelect=document.getElementById('category');
+function updateComponents(){const select=document.getElementById('component');select.replaceChildren();for(const [key,spec] of Object.entries(categoryOptions[categorySelect.value])){const option=document.createElement('option');option.value=key;option.textContent=key+' /'+spec[1];select.appendChild(option)}}
+categorySelect.addEventListener('change',updateComponents);updateComponents();
+</script>{% endblock %}

@@ -10,6 +10,14 @@
     </div>
 
     <nav class="workspace-nav">
+        {% if current_user.role == 'TEACHER' %}
+        <section class="workspace-nav-group"><h2>Workspace</h2>
+            <a class="workspace-nav-link" href="{{ url_for('coursework.corrections') }}"><i class="bi bi-pencil-square"></i><span>My correction requests</span></a>
+            <a class="workspace-nav-link" href="{{ url_for('teaching.my_subjects') }}"><i class="bi bi-journal-bookmark"></i><span>My Subjects</span></a>
+            <a class="workspace-nav-link" href="{{ url_for('analytics.analytics_page') }}"><i class="bi bi-graph-up"></i><span>Department reports</span></a>
+            <a class="workspace-nav-link" href="{{ url_for('teaching.password') }}"><i class="bi bi-person"></i><span>Change password</span></a>
+        </section>
+        {% else %}
         <section class="workspace-nav-group" aria-labelledby="workspace-heading">
             <h2 id="workspace-heading">Workspace</h2>
             <a class="workspace-nav-link {{ 'active' if shell_area == 'dashboard' else '' }}" href="{{ url_for('index') }}">
@@ -29,6 +37,7 @@
             </a>
         </section>
 
+        {% endif %}
         <section class="workspace-nav-group" aria-labelledby="results-heading">
             <h2 id="results-heading">University results</h2>
             <a class="workspace-nav-link {{ 'active' if shell_area == 'result-imports' else '' }}" href="{{ url_for('result_data.index') }}">
@@ -58,6 +67,9 @@
         {% if current_user.role == 'ADMIN' %}
         <section class="workspace-nav-group" aria-labelledby="admin-heading">
             <h2 id="admin-heading">Administration</h2>
+            <a class="workspace-nav-link" href="{{ url_for('coursework.corrections') }}"><i class="bi bi-check-square"></i><span>Mark corrections</span></a>
+            <a class="workspace-nav-link" href="{{ url_for('workflow.roster_page') }}"><i class="bi bi-people"></i><span>Student rosters</span></a>
+            <a class="workspace-nav-link" href="{{ url_for('teaching.teachers') }}"><i class="bi bi-person-workspace"></i><span>Teachers and assignments</span></a>
             <a class="workspace-nav-link" href="{{ url_for('subjects.subjects_page') }}">
                 <i class="bi bi-journal-bookmark" aria-hidden="true"></i><span>Subjects</span>
             </a>
@@ -83,3 +95,4 @@
     </div>
 </aside>
 <button class="workspace-scrim" type="button" aria-label="Close navigation" onclick="toggleSidebar()"></button>
+

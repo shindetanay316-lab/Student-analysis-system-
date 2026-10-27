@@ -163,9 +163,10 @@
             </div>
             <div class="card-body">
                 <p class="card-desc">
-                    Upload the completed Excel file. CA1 must be 0–30, CA2 must be 0–30, and External must be 0–40.
+                    Preview the completed Excel file before confirming. Use A for explicit absence; blanks remain missing. CA1 must be 0–30, CA2 must be 0–30, and External must be 0–40.
                 </p>
-                <form method="POST" action="/upload-lab" enctype="multipart/form-data">
+                <form method="POST" action="{{ url_for('coursework.preview_lab') }}" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="subject_code" value="{{ selected_subject.subject_code }}">
                     <input type="hidden" name="semester_id" value="{{ selected_semester }}">
                     <input type="hidden" name="academic_year" value="{{ academic_year }}">
@@ -185,8 +186,8 @@
                     </div>
 
                     <div class="btn-row">
-                        <button type="submit" class="btn btn-primary" onclick="return confirm('Upload and calculate lab marks for this subject?')">
-                            Upload Lab Marks
+                        <button type="submit" class="btn btn-primary">
+                            Preview lab marks
                         </button>
                     </div>
                 </form>
@@ -195,7 +196,7 @@
 
         <div class="card">
             <div class="card-header">
-                <h2 class="card-title">Step 4 — Download Lab Report</h2>
+                <h2 id="subject-reports" class="card-title">Step 4 — Download Lab Report</h2>
             </div>
             <div class="card-body">
                 <p class="card-desc">

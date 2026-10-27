@@ -41,7 +41,9 @@ def _flag(name):
 
 def _subject_dependency_count(subject_code):
     """Rows that make hard-delete unsafe."""
+    from teaching_models import TeachingAssignment
     return {
+        "teaching_assignments": TeachingAssignment.query.filter_by(subject_code=subject_code).count(),
         "enrollments": Enrollment.query.filter_by(subject_code=subject_code).count(),
         "theory_marks": TheoryMarks.query.filter_by(subject_code=subject_code).count(),
         "lab_marks": LabMarks.query.filter_by(subject_code=subject_code).count(),

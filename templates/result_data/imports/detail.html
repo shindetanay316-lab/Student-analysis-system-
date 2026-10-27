@@ -156,8 +156,11 @@
         </div>
         {% if report.validation_status != 'NOT_VALIDATED' %}
         <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-outline-primary" href="{{ url_for('result_exports.pdf', import_job_id=job.id) }}">Download PDF report</a>
+            <a class="btn btn-outline-primary" href="{{ url_for('result_exports.settings', import_job_id=job.id) }}">Report settings</a>
             <a class="btn btn-success" href="{{ url_for('result_exports.excel', import_job_id=job.id) }}"><i class="bi bi-file-earmark-excel" aria-hidden="true"></i> Download Excel</a>
             <a class="btn btn-outline-primary" href="{{ url_for('result_exports.csv', import_job_id=job.id) }}"><i class="bi bi-filetype-csv" aria-hidden="true"></i> Download CSV</a>
+            <a class="btn btn-outline-secondary" href="{{ url_for('result_exports.detailed_excel', import_job_id=job.id) }}">Detailed data workbook</a>
             <a class="btn btn-outline-dark" href="{{ url_for('result_exports.json', import_job_id=job.id) }}"><i class="bi bi-braces" aria-hidden="true"></i> Download JSON</a>
         </div>
         {% else %}

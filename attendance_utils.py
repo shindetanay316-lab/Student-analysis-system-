@@ -918,6 +918,11 @@ def parse_attendance_upload(file_obj):
         return False, ["Invalid or missing semester metadata."], 0
     academic_year = str(meta.get('academic_year') or '').strip()
     subject_code = clean_code(meta.get('subject_code'))
+    # Authorize workbook metadata, never just the visible page/form selection.
+    from flask import has_request_context
+    if has_request_context():
+        from teaching_access import require_assignment
+        require_assignment(subject_code,semester_id,academic_year)
     division = clean_filter_value(meta.get('division'))
     batch = clean_filter_value(meta.get('batch'))
 

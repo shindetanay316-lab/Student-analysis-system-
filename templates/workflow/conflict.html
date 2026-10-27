@@ -1,0 +1,3 @@
+{% extends 'result_data/base.html' %}
+{% block workspace_title %}Preview needs refreshing{% endblock %}
+{% block content %}<h1>Preview needs refreshing</h1><p class="alert alert-warning">{{ message }}</p><a class="btn btn-primary" href="{{ url_for({'MARKS':'ct1_page','ROSTER':'workflow.roster_page','LAB_MARKS':'lab.lab_marks_page','EXTERNAL_MARKS':'external.external_marks_page'}.get(kind,'workflow.subject_analysis'),**context) }}">Return and create a fresh preview</a>{% endblock %}

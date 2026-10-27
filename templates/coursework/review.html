@@ -1,0 +1,10 @@
+{% extends 'result_data/base.html' %}
+{% block title %}Review marks | ACADPULSE{% endblock %}
+{% block workspace_title %}Review before saving{% endblock %}
+{% block content %}
+<h1>Review {{ 'lab / project' if review.kind=='LAB_MARKS' else 'external ESE' }} marks</h1><p><strong>{{ subject.subject_name }}</strong> · {{ review.context.academic_year }} · Semester {{ review.context.semester_id }} · Division {{ review.context.division or 'All' }} · Batch {{ review.context.batch or 'All' }}</p>
+<div class="alert alert-info">{% if review.confirmed_at %}This review is already confirmed. Resubmitting it does not duplicate marks.{% else %}{{ review.rows|length }} students validated. No marks have been saved yet. Confirmation saves and locks the displayed components. Zero is numeric; Absent is explicitly declared.{% endif %}</div>
+{% if review.source_workbook %}<p><a href="{{ url_for('workflow.review_source',token=review.token) }}">Download original uploaded workbook</a></p>{% endif %}
+<div class="table-responsive"><table class="table table-striped"><thead><tr><th>Sr. No.</th><th>PRN</th><th>Student Name</th>{% if review.kind=='LAB_MARKS' %}<th>CA1 /30</th><th>CA2 /30</th><th>External /40</th>{% else %}<th>External ESE /60</th>{% endif %}</tr></thead><tbody>{% for row in review.rows %}<tr><td>{{ loop.index }}</td><td>{{ row.prn }}</td><td>{{ row.name }}</td>{% for component in (['CA1','CA2','LAB_EXTERNAL'] if review.kind=='LAB_MARKS' else ['EXTERNAL']) %}<td>{{ row['values'][component]['value'] if row['values'][component]['value'] is not none else 'Absent' }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+{% if not review.confirmed_at %}<form method="post" action="{{ url_for('workflow.confirm_review',token=review.token) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-primary">Confirm and lock marks</button> <a class="btn btn-outline-secondary" href="{{ url_for('lab.lab_marks_page' if review.kind=='LAB_MARKS' else 'external.external_marks_page',**review.context) }}">Cancel / upload corrected file</a></form>{% endif %}
+{% endblock %}

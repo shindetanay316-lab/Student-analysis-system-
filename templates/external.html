@@ -172,7 +172,8 @@
                     Upload the completed Excel file. All entries will be validated
                     before saving.
                 </p>
-                <form method="POST" action="/upload-external" enctype="multipart/form-data" id="uploadForm">
+                <form method="POST" action="{{ url_for('coursework.preview_external') }}" enctype="multipart/form-data" id="uploadForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="subject_code" value="{{ selected_subject_code }}">
                     <input type="hidden" name="semester_id" value="{{ selected_sem_id }}">
                     <input type="hidden" name="academic_year" value="{{ academic_year }}">
@@ -193,8 +194,8 @@
 
                     <div class="btn-row">
                         <button type="submit" class="btn btn-primary"
-                            onclick="return confirm('Confirm submission of ESE marks?');">
-                            Submit External Marks
+>
+                            Preview external marks
                         </button>
                     </div>
                 </form>

@@ -129,13 +129,18 @@ def _validate_report_configuration(report: ExamReport) -> None:
             )
         else:
             marks_total += subject.total_maximum
+        if subject.total_minimum is None:
+            _add_issue(report, ValidationIssue.SEVERITY_WARNING, "SUBJECT",
+                       "MINIMUM_NOT_PRINTED",
+                       f"{subject.subject_code}: the PDF does not print a total pass minimum; no grade rule was inferred.",
+                       field_name="total_minimum")
         if (
-            subject.total_minimum is None
-            or subject.total_minimum < 0
+            subject.total_minimum is not None
+            and (subject.total_minimum < 0
             or (
                 subject.total_maximum is not None
                 and subject.total_minimum > subject.total_maximum
-            )
+            ))
         ):
             _add_issue(
                 report,
@@ -200,28 +205,20 @@ def _validate_report_configuration(report: ExamReport) -> None:
                 calculated_value=component_maximum,
             )
 
-    if report.maximum_credits is not None and credit_total != report.maximum_credits:
-        _add_issue(
-            report,
-            ValidationIssue.SEVERITY_WARNING,
-            "REPORT",
-            "MAXIMUM_CREDITS_MISMATCH",
-            "The sum of credit-bearing subject credits differs from the printed maximum credits.",
-            field_name="maximum_credits",
-            reported_value=report.maximum_credits,
-            calculated_value=credit_total,
-        )
-    if report.maximum_marks is not None and marks_total != report.maximum_marks:
-        _add_issue(
-            report,
-            ValidationIssue.SEVERITY_WARNING,
-            "REPORT",
-            "MAXIMUM_MARKS_MISMATCH",
-            "The sum of subject maxima differs from the printed maximum marks.",
-            field_name="maximum_marks",
-            reported_value=report.maximum_marks,
-            calculated_value=marks_total,
-        )
+    schemas = {tuple(report.subject_codes_for_page(student.source_page)) for student in report.students}
+    by_code = {subject.subject_code: subject for subject in report.subjects}
+    for codes in sorted(schemas):
+        page_subjects = [by_code[code] for code in codes if code in by_code and not by_code[code].is_audit]
+        credit_total = sum((subject.credits or Decimal("0") for subject in page_subjects), Decimal("0"))
+        marks_total = sum((subject.total_maximum or Decimal("0") for subject in page_subjects), Decimal("0"))
+        if report.maximum_credits is not None and credit_total != report.maximum_credits:
+            _add_issue(report, ValidationIssue.SEVERITY_WARNING, "REPORT", "MAXIMUM_CREDITS_MISMATCH",
+                       "The printed page's subject credits differ from the printed maximum credits.",
+                       field_name="maximum_credits", reported_value=report.maximum_credits, calculated_value=credit_total)
+        if report.maximum_marks is not None and marks_total != report.maximum_marks:
+            _add_issue(report, ValidationIssue.SEVERITY_WARNING, "REPORT", "MAXIMUM_MARKS_MISMATCH",
+                       "The printed page's subject maxima differ from the printed maximum marks.",
+                       field_name="maximum_marks", reported_value=report.maximum_marks, calculated_value=marks_total)
     if (
         report.maximum_grade_points is not None
         and report.maximum_credits is not None
@@ -246,9 +243,10 @@ def _validate_student(report: ExamReport, student: ReportStudent) -> None:
         _clear_calculated_summary(student)
         return
 
-    results_by_subject = {result.subject_id: result for result in student.subject_results}
+    results_by_subject = {result.subject.subject_code: result for result in student.subject_results}
+    expected_codes = report.subject_codes_for_page(student.source_page)
     for subject in report.subjects:
-        if subject.id not in results_by_subject:
+        if subject.subject_code in expected_codes and subject.subject_code not in results_by_subject:
             _add_issue(
                 report,
                 ValidationIssue.SEVERITY_ERROR,
@@ -286,7 +284,7 @@ def _validate_subject_result(
                 "The audit grade is missing.",
                 "audit_grade",
             )
-        elif result.audit_grade != "AU":
+        elif result.audit_grade not in {"AU", "EX", "PASS", "S", "SATISFACTORY"}:
             _add_result_issue(
                 report,
                 student,
@@ -306,6 +304,11 @@ def _validate_subject_result(
         assessment.component_type: assessment
         for assessment in result.subject.assessments
     }
+    if report.source_data is not None:
+        page_types = report.source_data.data.get("page_assessment_types", {}).get(str(result.source_page), {})
+        if result.subject.subject_code in page_types:
+            expected_assessments = {key: value for key, value in expected_assessments.items()
+                                    if key in page_types[result.subject.subject_code]}
     components = {component.component_type: component for component in result.components}
     values: list[Decimal | None] = []
     components_complete = True
@@ -441,7 +444,12 @@ def _validate_subject_result(
                 result.component_sum,
             )
 
-    if not result.grade:
+    source_grade_blank = result.grade_raw == "|"
+    if source_grade_blank:
+        _add_result_issue(report, student, result, ValidationIssue.SEVERITY_WARNING,
+                          "GRADE_NOT_PRINTED", "The source prints | instead of a grade; the marks were retained without inventing a grade.",
+                          "grade", result.grade_raw)
+    if not result.grade and not source_grade_blank:
         _add_result_issue(
             report,
             student,
@@ -451,7 +459,7 @@ def _validate_subject_result(
             "The subject grade is missing.",
             "grade",
         )
-    if result.grade_point is None:
+    if result.grade_point is None and not source_grade_blank:
         _add_result_issue(
             report,
             student,
@@ -461,7 +469,7 @@ def _validate_subject_result(
             "The subject grade point is missing.",
             "grade_point",
         )
-    if result.credit_points is None:
+    if result.credit_points is None and not source_grade_blank:
         _add_result_issue(
             report,
             student,
@@ -472,7 +480,7 @@ def _validate_subject_result(
             "credit_points",
         )
 
-    if components_complete and result.total_value is not None:
+    if components_complete and result.total_value is not None and not source_grade_blank and result.grade != "AU":
         outcome = calculate_grade(
             result.total_value,
             result.subject.total_minimum,
@@ -602,7 +610,7 @@ def _validate_student_summary(report: ExamReport, student: ReportStudent) -> Non
         summary.reported_earned_credits,
         summary.calculated_earned_credits,
     )
-    if summary.calculated_status != student.result_status:
+    if summary.calculated_status is not None and summary.calculated_status != student.result_status:
         _add_issue(
             report,
             ValidationIssue.SEVERITY_WARNING,

@@ -56,6 +56,7 @@
             <div class="card-body">
                 <form id="selectorForm" method="GET" action="/ct1">
                     <input type="hidden" name="academic_year" id="selectorAcademicYear" value="{{ academic_year }}">
+                    {% if not selected_exam and selected_code %}<input type="hidden" name="subject_code" value="{{ selected_code }}">{% endif %}
                     <div class="form-grid three-col">
 
                         <div class="form-group">
@@ -129,6 +130,13 @@
         </div>
 
         {% if selected_code %}
+        <div class="alert {{ 'alert-info' if selected_roster else 'alert-warning' }}">
+            <strong>{{ selected_roster|length }} enrolled students</strong> for {{ academic_year }}, Semester {{ selected_semester }} and the selected division/batch filters.
+            {% if not selected_roster %}<p>The teacher assignment is ready, but this context has no student roster. An administrator must configure it before marks templates and internal reports can contain students.</p>{% endif %}
+            {% if current_user.role == 'ADMIN' %}<a href="{{ url_for('workflow.roster_page',subject_code=selected_code,semester_id=selected_semester,academic_year=academic_year) }}">Configure student roster</a>{% endif %}
+            <a href="{{ url_for('workflow.subject_analysis',subject_code=selected_code,semester_id=selected_semester,academic_year=academic_year,division=selected_division,batch=selected_batch) }}">Subject analysis</a>
+        </div>
+
 
         {% set is_locked = lock_status.get(selected_code + '_' + selected_exam, False) %}
 
@@ -154,10 +162,13 @@
             <div class="card-body">
                 <div class="form-grid two-col">
                     <div class="form-group">
-                        <label class="form-label">Subject Teacher Name</label>
-                        <input type="text" id="teacherName" class="form-control"
-                            placeholder="Enter full name of subject teacher"
-                            value="{{ request.args.get('subject_teacher', '') }}">
+                        {% if current_user.role == 'TEACHER' %}
+                        <label class="form-label">Signed-in teacher</label><p><strong>{{ current_user.username }}</strong></p>
+                        <input type="hidden" id="teacherName" value="{{ current_user.username }}">
+                        {% else %}
+                        <label class="form-label">Subject teacher (optional)</label>
+                        <input type="text" id="teacherName" class="form-control" value="{{ request.args.get('subject_teacher', current_user.username) }}">
+                        {% endif %}
                     </div>
                     <div class="form-group">
                         <label class="form-label">Examination Date</label>
@@ -208,15 +219,16 @@
         <!-- STEP 4: Upload -->
         <div class="card">
             <div class="card-header">
-                <h2 class="card-title">Step 4 — Upload Completed Marks File</h2>
+                <h2 class="card-title">Step 4 — Preview Completed Marks File</h2>
             </div>
             <div class="card-body">
                 <p class="card-desc">
-                    Upload the completed Excel file. All entries will be validated
+                    Upload the completed Excel file. Review every matched student and mark before confirming. All entries will be validated
                     before saving. Once submitted, this record will be permanently
                     locked and cannot be modified.
                 </p>
-                <form method="POST" action="/upload-ct1" enctype="multipart/form-data" id="uploadForm">
+                <form method="POST" action="{{ url_for('workflow.marks_preview') }}" enctype="multipart/form-data" id="uploadForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="subject_code" value="{{ selected_code }}">
                     <input type="hidden" name="exam_type" value="{{ selected_exam }}">
                     <input type="hidden" name="semester_id" value="{{ selected_semester }}">
@@ -239,7 +251,7 @@
 
                     <div class="btn-row">
                         <button type="submit" class="btn btn-primary" onclick="return prepareAndConfirm()">
-                            Submit Marks
+                            Preview marks
                         </button>
                     </div>
                 </form>
@@ -298,7 +310,7 @@
         {% if selected_code and selected_semester %}
         <div class="card">
             <div class="card-header">
-                <h2 class="card-title">Internal Marks Report</h2>
+                <h2 id="subject-reports" class="card-title">Internal Marks Report</h2>
             </div>
             <div class="card-body">
                 <p class="card-desc">
@@ -380,10 +392,6 @@
                 ? document.getElementById('teacherName').value : '';
             const date = document.getElementById('examDate')
                 ? document.getElementById('examDate').value : '';
-            if (!teacher.trim()) {
-                alert('Please enter the Subject Teacher Name before downloading the template.');
-                return;
-            }
             const url = `/download-ct1-template?subject_code=${SELECTED_CODE}`
                 + `&exam_type=${SELECTED_EXAM}`
                 + `&semester_id=${SELECTED_SEM}`
@@ -409,9 +417,7 @@
             document.getElementById('hiddenTeacher').value = teacher;
             document.getElementById('hiddenDate').value = date;
 
-            return confirm(
-                'Once submitted, marks will be permanently locked and cannot be modified.\n\nConfirm submission?'
-            );
+            return true;
         }
 
         function updateFileName(input) {

@@ -1,0 +1,43 @@
+{% extends 'result_data/base.html' %}
+{% block title %}Teachers and assignments | ACADPULSE{% endblock %}
+{% block workspace_title %}Teachers and assignments{% endblock %}
+{% block content %}
+<h1>Teachers and assignments</h1><p class="text-secondary">One account per teacher. Assign each subject for its academic year and semester. Revoking access preserves academic records.</p>
+<div class="row g-4 mb-4"><div class="col-lg-5"><section class="card h-100"><div class="card-body"><h2 class="h5">Create teacher account</h2>
+<form method="post" action="{{ url_for('teaching.create_teacher') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label class="form-label" for="username">Username</label><input id="username" class="form-control mb-3" name="username" minlength="3" maxlength="50" autocomplete="off" required>
+<label class="form-label" for="temporary">Temporary password</label><input id="temporary" class="form-control mb-3" type="password" name="password" minlength="10" autocomplete="new-password" required>
+<p class="small text-secondary">At least 10 characters. The teacher must change it on first login.</p><button class="btn btn-primary">Create account</button></form>
+</div></section></div><div class="col-lg-7"><section class="card h-100" id="assign-subject"><div class="card-body"><h2 class="h5">Assign a subject</h2>
+<p class="small text-secondary">Academic year means the teaching year, for example 2026-27. Admission cohorts, divisions and practical batches belong to the enrolled student roster.</p>
+<form method="get" action="{{ url_for('teaching.teachers') }}#assign-subject" class="border rounded p-3 mb-3" id="assignment-context-form">
+<div class="row g-2"><div class="col-sm-6"><label class="form-label" for="academic-year">Academic year</label><input id="academic-year" name="academic_year" class="form-control" list="academic-year-options" value="{{ academic_year }}" placeholder="2026-27" required autocomplete="off"><datalist id="academic-year-options">{% for year in academic_years %}<option value="{{ year }}">{% endfor %}</datalist><div class="form-text">Select a suggestion or type another year.</div></div>
+<div class="col-sm-6"><label class="form-label" for="semester">Semester</label><select id="semester" name="semester_id" class="form-select" required>{% for number in range(1,9) %}<option value="{{ number }}" {% if number == semester_id %}selected{% endif %}>Semester {{ number }}</option>{% endfor %}</select></div></div>
+<button class="btn btn-outline-primary mt-3" type="submit">Load subjects</button>
+</form>
+<div class="alert alert-light border" role="status">Loaded: <strong>{{ academic_year }} · Semester {{ semester_id }}</strong> — {{ subjects|length }} available subjects.</div>
+{% if subjects %}
+<form method="post" action="{{ url_for('teaching.assign_subject') }}" id="subject-assignment-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input type="hidden" name="academic_year" value="{{ academic_year }}"><input type="hidden" name="semester_id" value="{{ semester_id }}">
+<label class="form-label" for="teacher">Teacher</label><select id="teacher" class="form-select mb-3" name="teacher_id" required><option value="">Select teacher</option>{% for teacher in teachers if teacher.is_active %}<option value="{{ teacher.user_id }}">{{ teacher.username }}</option>{% endfor %}</select>
+<label class="form-label" for="subject-search">Find a subject</label><input type="search" id="subject-search" class="form-control mb-2" placeholder="Type the subject name or code" aria-controls="subject" autocomplete="off">
+<label class="form-label" for="subject">Subject / actual elective option</label><select id="subject" class="form-select mb-2" name="subject_code" size="6" required><option value="">Select a subject below</option>{% for subject in subjects %}<option value="{{ subject.subject_code }}">{{ subject.subject_name }} ({{ subject.subject_code }})</option>{% endfor %}</select>
+<p id="subject-search-status" class="small text-secondary" role="status">{{ subjects|length }} subjects. Click a subject to select it.</p>
+<div id="roster-preview" class="border rounded p-3 mb-3"><h3 class="h6">Enrolled cohorts and groups</h3><p id="roster-status" class="small text-secondary mb-1">Select a subject to see its enrolled cohorts, divisions and practical batches.</p><div class="table-responsive"><table class="table table-sm mb-0" id="roster-table" hidden><thead><tr><th>Admission cohort</th><th>Division</th><th>Practical batch</th><th>Students</th></tr></thead><tbody></tbody></table></div></div>
+<p class="small text-secondary">The assignment covers all students enrolled in this subject for the loaded academic year and semester. Division and batch filters are available inside Marks and Attendance.</p>
+<p id="context-change-message" class="text-danger" role="status" hidden>The year or semester changed. Click Load subjects before assigning.</p>
+<button class="btn btn-primary" type="submit" id="assign-button">Assign subject</button></form>
+<script type="application/json" id="assignment-roster-data">{{ roster_groups|tojson }}</script>
+{% else %}
+<div class="alert alert-warning"><strong>No active subjects are configured for Semester {{ semester_id }}.</strong><p class="mb-2">Add the actual subjects or elective options in Subject Management, then return here and click Load subjects.</p><a class="btn btn-outline-dark" href="{{ url_for('subjects.subjects_page',semester_id=semester_id) }}">Open Subject Management</a></div>
+{% endif %}
+</div></section></div></div>
+<section class="card mb-4"><div class="card-body"><h2 class="h5">Teacher accounts</h2><div class="table-responsive"><table class="table align-middle"><thead><tr><th>Username</th><th>Status</th><th>Account access</th><th>Reset password</th></tr></thead><tbody>
+{% for teacher in teachers %}<tr><td>{{ teacher.username }}</td><td>{{ 'Active' if teacher.is_active else 'Inactive' }}</td><td><form method="post" action="{{ url_for('teaching.teacher_status',user_id=teacher.user_id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="active" value="{{ '0' if teacher.is_active else '1' }}"><button class="btn btn-sm btn-outline-secondary">{{ 'Deactivate' if teacher.is_active else 'Activate' }}</button></form></td><td><form class="d-flex gap-2" method="post" action="{{ url_for('teaching.reset_password',user_id=teacher.user_id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input class="form-control form-control-sm" type="password" name="password" minlength="10" placeholder="Temporary password" aria-label="Temporary password for {{ teacher.username }}" autocomplete="new-password" required><button class="btn btn-sm btn-outline-secondary">Reset</button></form></td></tr>
+{% else %}<tr><td colspan="4">No teacher accounts yet.</td></tr>{% endfor %}</tbody></table></div></div></section>
+<section class="card mb-4"><div class="card-body"><h2 class="h5">Subject assignments</h2><div class="table-responsive"><table class="table align-middle"><thead><tr><th>Teacher</th><th>Subject</th><th>Academic year</th><th>Semester</th><th>Status</th><th>Action</th></tr></thead><tbody>
+{% for assignment in assignments %}<tr><td>{{ assignment.teacher.username }}</td><td>{{ assignment.subject.subject_name }}<br><small>{{ assignment.subject_code }}</small></td><td>{{ assignment.academic_year }}</td><td>{{ assignment.semester_id }}</td><td>{{ 'Active' if assignment.is_active else 'Revoked' }}</td><td>{% if assignment.is_active %}<form method="post" action="{{ url_for('teaching.revoke_assignment',assignment_id=assignment.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-danger">Revoke</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="6">No assignments yet.</td></tr>{% endfor %}</tbody></table></div></div></section>
+<details class="card"><summary class="card-header">Recent access changes</summary><div class="card-body"><table class="table"><thead><tr><th>Time</th><th>Action</th><th>Details</th></tr></thead><tbody>{% for event in events %}<tr><td>{{ event.created_at.strftime('%d/%m/%Y %H:%M') }} UTC</td><td>{{ event.action }}</td><td>{{ event.details }}</td></tr>{% endfor %}</tbody></table></div></details>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static',filename='js/teacher_assignments.js',v='1.1.0') }}" defer></script>{% endblock %}

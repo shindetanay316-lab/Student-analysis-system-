@@ -26,7 +26,7 @@ def audit_import(job: ImportJob) -> list[AcceptanceCheck]:
     student_count = len(report.students)
     subject_count = len(report.subjects)
     result_count = report.result_count
-    expected_result_count = student_count * subject_count
+    expected_result_count = report.expected_result_count
     summary_count = sum(student.summary is not None for student in report.students)
     unique_seat_count = len({student.seat_number for student in report.students})
 

@@ -32,6 +32,15 @@ def create_app():
 
     db.init_app(app)
 
+    from teaching_access import register_access
+    from routes_teaching import teaching_bp
+    app.register_blueprint(teaching_bp)
+    register_access(app)
+    from routes_workflow import workflow_bp
+    app.register_blueprint(workflow_bp)
+    from routes_coursework import coursework_bp
+    app.register_blueprint(coursework_bp)
+
     login_manager.init_app(app)
     login_manager.login_view = 'login'
     login_manager.login_message = 'Please login first.'
@@ -76,6 +85,11 @@ def create_app():
             active_semester.semester_id if active_semester else None,
             app.config.get('CURRENT_ACADEMIC_YEAR', '2024-25'),
         )
+        requested_semester=request.args.get('semester_id',type=int)
+        requested_year=request.args.get('academic_year','').strip()
+        if requested_semester:
+            academic_year=requested_year or get_academic_year_for_semester(requested_semester)
+            active_semester=db.session.get(Semester,(requested_semester,academic_year))
         return {
             'shell_academic_year': academic_year,
             'shell_active_semester': active_semester,
@@ -138,6 +152,8 @@ def login():
             return redirect(url_for('login'))
 
         login_user(user)
+        from teaching_access import record_login
+        record_login(user)
         flash('Login successful.', 'success')
         return redirect(url_for('index'))
 
@@ -159,6 +175,9 @@ def logout():
 @app.route('/')
 @login_required
 def index():
+    if current_user.role == 'TEACHER':
+        from routes_teaching import my_subjects
+        return my_subjects()
     # Active semester
     active_sem = Semester.query.filter_by(is_active=True).first()
     academic_year = _academic_year_for_semester(
@@ -366,8 +385,12 @@ def ct1_page():
                 selected_batch,
             )
 
+    from workflow_services import roster
+    roster_context={'subject_code':selected_code,'semester_id':selected_semester,'academic_year':academic_year,'division':selected_division,'batch':selected_batch}
+    selected_roster=roster(roster_context) if selected_code and selected_semester else []
     return render_template(
         'ct1.html',
+        selected_roster=selected_roster,
         subjects             = subjects,
         lock_status          = lock_status,
         academic_year        = academic_year,
@@ -390,7 +413,8 @@ def download_ct1_template():
     from excel_utils import generate_ct1_template
 
     subject_code    = request.args.get('subject_code', '').strip()
-    subject_teacher = request.args.get('subject_teacher', '').strip()
+    from routes_workflow import teacher_name
+    subject_teacher = teacher_name(request.args.get('subject_teacher', ''))
     exam_date       = request.args.get('exam_date', '').strip()
     exam_type       = clean_exam_type(request.args.get('exam_type', 'CT1'), VALID_EXAM_TYPES)
     semester_id     = request.args.get('semester_id', type=int)
@@ -463,162 +487,15 @@ def download_ct1_template():
 @app.route('/upload-ct1', methods=['POST'])
 @login_required
 def upload_ct1():
-    from excel_utils import parse_ct1_upload
-
-    subject_code  = request.form.get('subject_code', '').strip()
-    exam_type     = clean_exam_type(request.form.get('exam_type', 'CT1'), VALID_EXAM_TYPES)
-    semester_id   = request.form.get('semester_id', type=int)
-    division      = clean_filter(request.form.get('division', ''))
-    batch         = clean_filter(request.form.get('batch', ''))
-    academic_year = request.form.get('academic_year', '').strip()
-    if not academic_year:
-        academic_year = _academic_year_for_semester(semester_id)
-    max_marks     = EXAM_MAX_MARKS.get(exam_type, 10)
-
-    if not subject_code:
-        flash('Subject code missing.', 'error')
-        return redirect(url_for('ct1_page'))
-
-    subject = _visible_marks_subject_filter(semester_id).filter(
-        Subject.subject_code == subject_code
-    ).first() if semester_id else None
-    if not subject or not Semester.query.filter_by(
-        semester_id=semester_id,
-        academic_year=academic_year,
-    ).first():
-        flash('Invalid subject or semester selection.', 'error')
-        return redirect(url_for('ct1_page', semester_id=semester_id))
-
-    expected_query = (
-        db.session.query(Student)
-        .join(Enrollment, Enrollment.prn == Student.prn)
-        .filter(
-            Enrollment.subject_code == subject_code,
-            Enrollment.semester_id == semester_id,
-            Enrollment.academic_year == academic_year,
-        )
-    )
-    expected_query = apply_student_batch_filters(expected_query, Student, division, batch)
-    expected_prns = {student.prn for student in expected_query.all()}
-    if not expected_prns:
-        flash('No enrolled students found for the selected division/batch.', 'error')
-        return redirect(url_for(
-            'ct1_page', semester_id=semester_id, exam_type=exam_type,
-            subject_code=subject_code, division=division, batch=batch,
-        ))
-
-    if _is_marks_locked(
-        subject_code,
-        academic_year,
-        exam_type,
-        semester_id,
-        division,
-        batch,
-    ):
-        flash(
-            'Marks have been successfully submitted and locked. '
-            'Further modifications are restricted to preserve academic record integrity.',
-            'locked'
-        )
-        return redirect(url_for(
-            'ct1_page',
-            semester_id   = semester_id,
-            academic_year = academic_year,
-            exam_type     = exam_type,
-            subject_code  = subject_code,
-            division      = division,
-            batch         = batch
-        ))
-
-    file = request.files.get('ct1_file')
-    if not file or file.filename == '':
-        flash('No file selected.', 'error')
-        return redirect(url_for(
-            'ct1_page',
-            semester_id  = semester_id,
-            academic_year = academic_year,
-            exam_type    = exam_type,
-            subject_code = subject_code,
-            division     = division,
-            batch        = batch
-        ))
-
-    if not file.filename.lower().endswith('.xlsx'):
-        flash('Only .xlsx files are accepted.', 'error')
-        return redirect(url_for(
-            'ct1_page',
-            semester_id  = semester_id,
-            academic_year = academic_year,
-            exam_type    = exam_type,
-            subject_code = subject_code,
-            division     = division,
-            batch        = batch
-        ))
-
-    scope_division = division or 'ALL'
-    scope_batch = batch or 'ALL'
-    submission = InternalMarksSubmission.query.filter_by(
-        subject_code=subject_code,
-        semester_id=semester_id,
-        academic_year=academic_year,
-        exam_type=exam_type,
-        division=scope_division,
-        batch=scope_batch,
-    ).first()
-    if submission is None:
-        db.session.add(InternalMarksSubmission(
-            subject_code=subject_code,
-            semester_id=semester_id,
-            academic_year=academic_year,
-            exam_type=exam_type,
-            division=scope_division,
-            batch=scope_batch,
-        ))
-
-    success, errors, count = parse_ct1_upload(
-        file_obj      = file,
-        subject_code  = subject_code,
-        semester_id   = semester_id,
-        academic_year = academic_year,
-        exam_type     = exam_type,
-        max_marks     = max_marks,
-        allowed_prns  = expected_prns,
-    )
-
-    if not success:
-        db.session.rollback()
-        error_msgs = [f"Row {e['row']}: {e['col']} — {e['msg']}" for e in errors]
-        flash('Upload failed. Errors:\n' + '\n'.join(error_msgs), 'error')
-        return redirect(url_for(
-            'ct1_page',
-            semester_id  = semester_id,
-            academic_year = academic_year,
-            exam_type    = exam_type,
-            subject_code = subject_code,
-            division     = division,
-            batch        = batch
-        ))
-
-    flash(
-        f'Marks submitted successfully for {count} students. '
-        f'This record is now permanently locked.',
-        'success'
-    )
-    return redirect(url_for(
-        'ct1_page',
-        semester_id  = semester_id,
-        academic_year = academic_year,
-        exam_type    = exam_type,
-        subject_code = subject_code,
-        division     = division,
-        batch        = batch
-    ))
+    from routes_workflow import preview_internal_upload
+    return preview_internal_upload()
 
 @app.route('/download-ct1-report/<fmt>')
 @login_required
 def download_ct1_report(fmt):
     subject_code    = request.args.get('subject_code', '').strip()
-    subject_teacher = request.args.get('subject_teacher', '').strip()
+    from routes_workflow import teacher_name
+    subject_teacher = teacher_name(request.args.get('subject_teacher', ''))
     exam_date       = request.args.get('exam_date', '').strip()
     exam_type       = clean_exam_type(request.args.get('exam_type', 'CT1'), VALID_EXAM_TYPES)
     semester_id     = request.args.get('semester_id', type=int)
@@ -942,6 +819,11 @@ def download_internal_report(fmt):
         division=division,
         batch=batch,
     )
+    if not data:
+        flash('No students are enrolled for this subject and academic context. Configure its roster first.','warning')
+        return redirect(url_for('workflow.subject_analysis',subject_code=subject_code,semester_id=semester_id,academic_year=academic_year,division=division,batch=batch))
+    from routes_workflow import preserve_pending_internal
+    data=preserve_pending_internal(data,{'subject_code':subject_code,'semester_id':semester_id,'academic_year':academic_year})
     meta['class_teacher'] = app.config.get('CLASS_TEACHER_NAME', 'Class Teacher')
     meta['hod'] = app.config.get('HOD_NAME', 'HOD')
 

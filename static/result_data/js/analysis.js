@@ -3,6 +3,22 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!source || typeof Chart === "undefined") return;
 
     const analysis = JSON.parse(source.textContent);
+    const links = document.getElementById("analysis-links");
+    const openRecords = (filters) => {
+        if (!links) return;
+        const url = new URL(links.dataset.recordsUrl, window.location.origin);
+        Object.entries(filters).forEach(([key, value]) => url.searchParams.set(key, value));
+        window.location.assign(url.toString());
+    };
+    const handlers = {
+        sgpaChart: (i) => ({kind:"sgpa",value:analysis.sgpa_distribution[i].key}),
+        resultStatusChart: (i) => ({kind:"result",value:analysis.result_status[i].key}),
+        validationChart: (i) => ({kind:"validation",value:analysis.validation_status[i].key}),
+        gradeChart: (i) => ({kind:"grade",value:analysis.grade_distribution[i].grade}),
+        componentChart: (i) => ({kind:"component",value:analysis.component_performance[i].key}),
+        subjectChart: (i, dataset) => ({kind:"subject",value:analysis.subject_performance[i].code,
+            ...(dataset === 1 ? {outcome:"PASS"} : {measure:"average"})}),
+    };
     const styles = getComputedStyle(document.documentElement);
     const color = (name) => styles.getPropertyValue(name).trim();
     const palette = {
@@ -38,7 +54,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const createChart = (id, config) => {
         const canvas = document.getElementById(id);
-        if (canvas) new Chart(canvas, config);
+        if (!canvas) return;
+        config.options.onClick = (_event, elements) => {
+            if (elements.length && handlers[id]) {
+                const item = elements[0];
+                openRecords(handlers[id](item.index, item.datasetIndex));
+            }
+        };
+        config.options.onHover = (event, elements) => {
+            const target = event.native && event.native.target;
+            if (target) target.style.cursor = elements.length ? "pointer" : "default";
+        };
+        if (["resultStatusChart", "validationChart"].includes(id)) {
+            config.options.plugins.legend.onClick = (_event, item) => openRecords(handlers[id](item.index));
+        }
+        canvas.tabIndex = 0;
+        canvas.title = "Click a chart section to view its records";
+        new Chart(canvas, config);
     };
 
     createChart("sgpaChart", {
@@ -63,13 +95,19 @@ document.addEventListener("DOMContentLoaded", () => {
     createChart("subjectChart", {
         type: "bar",
         data: {
-            labels: analysis.subject_performance.map((item) => item.code),
+            labels: analysis.subject_performance.map((item) => item.name),
             datasets: [
                 { label: "Average marks %", data: analysis.subject_performance.map((item) => item.average_percentage), backgroundColor: palette.blue, borderRadius: 2 },
                 { label: "Pass rate %", data: analysis.subject_performance.map((item) => item.pass_rate), backgroundColor: palette.cyan, borderRadius: 2 },
             ],
         },
-        options: { responsive: true, maintainAspectRatio: false, scales: { ...commonScales, y: { ...commonScales.y, suggestedMax: 100, max: 100 } }, plugins: { legend: { position: "bottom" }, tooltip } },
+        options: { indexAxis: "y", responsive: true, maintainAspectRatio: false,
+            scales: { x: { ...commonScales.y, max: 100 }, y: { ...commonScales.x,
+                ticks: { autoSkip: false, callback: function(value) {
+                    const label = this.getLabelForValue(value);
+                    return label.match(/.{1,30}(?:\s|$)|\S{1,30}/g) || label;
+                } } } },
+            plugins: { legend: { position: "bottom" }, tooltip } },
     });
 
     const validationColor = (label) => ({ Valid: palette.green, Warning: palette.amber, Error: palette.red, Skipped: palette.slate }[label] || palette.blue);

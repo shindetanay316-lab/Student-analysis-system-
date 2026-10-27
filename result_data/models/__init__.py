@@ -3,6 +3,8 @@ from .exam_report import ExamReport
 from .import_job import ImportJob
 from .report_student import ReportStudent
 from .student_summary import StudentSummary
+from .source_data import ResultSourceData
+from .report_settings import ResultReportSettings
 from .subject import ResultSubject, Subject, SubjectAssessment
 from .subject_result import ResultComponent, SubjectResult
 from models import User
@@ -16,6 +18,8 @@ __all__ = [
     "ReportStudent",
     "ResultComponent",
     "StudentSummary",
+    "ResultSourceData",
+    "ResultReportSettings",
     "Subject",
     "ResultSubject",
     "SubjectAssessment",
