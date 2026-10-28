@@ -159,7 +159,7 @@ def generate_lab_template(meta, students):
 
         values = [
             sr,
-            _roll(sr),
+            student.get('roll_number') or _roll(sr),
             student["prn"],
             student["name"],
             ca1,

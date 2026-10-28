@@ -22,6 +22,9 @@ def keys(context):return {k:context[k] for k in ('subject_code','semester_id','a
 
 
 def validate_category(context,category):
+    from assessment_services import policy_for
+    if policy_for(context['subject_code'],context['semester_id'],context['academic_year']):
+        raise ValueError('This course uses configured assessments. Open Assessment rules and marks for entry or corrections.')
     if category not in SPECS:raise ValueError('Invalid assessment group.')
     subject=db.session.get(Subject,context['subject_code'])
     valid=subject and subject.is_active and not subject.is_audit and not subject.is_attendance_only

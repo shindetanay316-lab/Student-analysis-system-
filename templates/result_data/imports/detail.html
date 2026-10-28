@@ -2,6 +2,7 @@
 {% block title %}Import {{ job.id }} | ECE Academic Records{% endblock %}
 {% block workspace_title %}Review import{% endblock %}
 {% block content %}
+{% if current_user.role=='ADMIN' and job.confirmed_at and job.status in ['READY','EXPORTED'] %}<p><a class="btn btn-outline-primary" href="{{ url_for('academic.mapping',job_id=job.id) }}">Link to academic records</a></p>{% endif %}
 {% set badge_style = {
     'UPLOADED': 'secondary', 'EXTRACTING': 'info', 'REVIEW_REQUIRED': 'warning',
     'READY': 'success', 'FAILED': 'danger', 'EXPORTED': 'primary'

@@ -28,7 +28,7 @@ from external_excel_utils import generate_external_excel_report
 from final_result_utils import generate_sgpa_cgpa_excel_report
 from batch_utils import (
     clean_filter, apply_student_batch_filters, batch_label,
-    DIVISION_OPTIONS, BATCH_OPTIONS
+    DIVISION_OPTIONS, BATCH_OPTIONS, term_filter_options
 )
 from academic_utils import (
     get_academic_year_for_semester,
@@ -88,8 +88,10 @@ def _get_subject_students(subject_code, semester_id, academic_year, division="",
             models.Enrollment.academic_year == academic_year,
         )
     )
-    student_query = apply_student_batch_filters(student_query, models.Student, division, batch)
+    student_query = apply_student_batch_filters(student_query, models.Student, division, batch, semester_id, academic_year)
     students = student_query.order_by(models.Student.prn).all()
+    from term_services import students_in_term
+    students=students_in_term(students,semester_id,academic_year)
 
     prns = [s.prn for s in students]
     if not prns:
@@ -123,6 +125,7 @@ def _get_subject_students(subject_code, semester_id, academic_year, division="",
             ext_val = float(ext_row.external_marks)
 
         rows.append({
+            'roll_number': student.roll_number,
             "student_id": student.prn,
             "prn": student.prn,
             "name": student.name,
@@ -208,8 +211,8 @@ def external_marks_page():
         total_students=len(students_data),
         selected_division=division,
         selected_batch=batch,
-        division_options=DIVISION_OPTIONS,
-        batch_options=BATCH_OPTIONS,
+        division_options=term_filter_options(sem_id,academic_year)[0],
+        batch_options=term_filter_options(sem_id,academic_year)[1],
         batch_label=batch_label(division, batch),
     )
 

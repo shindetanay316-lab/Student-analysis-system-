@@ -338,6 +338,18 @@ def update_sgpa_cgpa_for_student(prn, semester_id, academic_year, db, models, co
 
         total_non_audit_credits += int(subj.credits or 0)
 
+        from assessment_services import policy_for, result_for
+        policy = policy_for(subj.subject_code, semester_id, academic_year)
+        if policy:
+            configured = result_for(policy, prn)
+            if configured['result']=='PENDING':
+                has_missing_marks = True
+            else:
+                subject_results.append(dict(credits_registered=subj.credits,
+                    credits_earned=subj.credits if configured['result']=='PASS' else 0,
+                    grade_point=configured['grade_point'],is_passed=configured['result']=='PASS'))
+            continue
+
         if subj.subject_type == 'THEORY':
             tm_row = models.TheoryMarks.query.filter_by(
                 prn=prn,

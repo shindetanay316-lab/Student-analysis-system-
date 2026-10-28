@@ -1,0 +1,13 @@
+{% extends 'result_data/base.html' %}
+{% block title %}Curriculum enrollment | ACADPULSE{% endblock %}
+{% block workspace_title %}Curriculum enrollment{% endblock %}
+{% block content %}
+<a href="{{ url_for('curriculum.index') }}">All curricula and bindings</a><h1>Enroll students in approved curriculum</h1><p>{{ binding.version.title }} · Regular cohort {{ binding.regular_cohort }} · Semester {{ binding.semester_id }} · {{ binding.academic_year }} · {{ binding.group_name }}</p>
+<p>{{ linked }} students already linked. This adds only missing subject enrollments after review. Actual admission years, profiles, existing enrollments and marks stay intact. Select DSE students explicitly against the matching regular cohort from semester 3. Choose one option per choice group; make separate selections for students taking different options.</p>
+<form method="get" class="d-flex gap-2 mb-3"><input class="form-control" name="q" value="{{ search }}" placeholder="Search existing students by PRN or name"><button class="btn btn-outline-primary">Search</button></form>
+<form method="post" action="{{ url_for('curriculum.roster_preview',binding_id=binding.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<h2 class="h5">Compulsory courses</h2><p>{% for r in courses if not r.choice_group and not r.is_bucket %}{{ r.name }} ({{ r.code }}){% if not loop.last %} · {% endif %}{% endfor %}</p>
+{% for group, options in groups.items() %}<div class="mb-3"><label class="form-label">{{ group }} — one option for this selection</label><select class="form-select" name="options" required><option value="">Select an option</option>{% for r in options %}<option value="{{ r.code }}">{{ r.name }} ({{ r.code }})</option>{% endfor %}</select></div>{% endfor %}
+{% for r in courses if r.is_bucket %}<div class="alert alert-warning">{{ r.name }} is a bucket parent. This preview cannot enroll it. Add verified actual options through Subject Management and assign them through Elective assignment.</div>{% endfor %}
+<div class="table-responsive"><table class="table"><thead><tr><th>Sr. No.</th><th>PRN</th><th>Student Name</th><th>Select</th><th>Actual admission year</th><th>Division / batch</th></tr></thead><tbody>{% for s in students %}<tr><td>{{ loop.index }}</td><td>{{ s.prn }}</td><td>{{ s.name }}</td><td><input type="checkbox" name="prns" value="{{ s.prn }}" aria-label="Select {{ s.prn }}"></td><td>{{ s.year_of_admission }}</td><td>{{ s.division or '—' }}/{{ s.batch or '—' }}</td></tr>{% else %}<tr><td colspan="6">No matching student profiles. Add real student profiles in Student rosters first.</td></tr>{% endfor %}</tbody></table></div><button class="btn btn-primary">Preview curriculum enrollment</button></form>
+{% endblock %}

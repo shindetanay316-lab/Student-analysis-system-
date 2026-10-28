@@ -133,9 +133,14 @@ class WorkflowTestCase(unittest.TestCase):
 
     def _xlsx_upload(self, url, fields, payload, filename="upload.xlsx"):
         data = dict(fields)
+        if url.startswith('/attendance/'):
+            from flask import g
+            g.pop('csrf_token', None)
+            page = self.client.get('/profile/password')
+            data['csrf_token'] = re.search(rb'name="csrf_token" value="([^"]+)"', page.data).group(1).decode()
         data[next(iter(payload))] = (io.BytesIO(next(iter(payload.values()))), filename)
         response=self.client.post(url, data=data, content_type="multipart/form-data", follow_redirects=False)
-        if response.status_code==302 and '/workflow/reviews/' in response.location:
+        if response.status_code==302 and any(path in response.location for path in ('/workflow/reviews/','/attendance/reviews/')):
             page=self.client.get(response.location)
             token=re.search(rb'name="csrf_token" value="([^"]+)"',page.data).group(1).decode()
             response=self.client.post(response.location+'/confirm',data={'csrf_token':token})
@@ -387,6 +392,9 @@ class WorkflowTestCase(unittest.TestCase):
     def test_all_main_pages_render_for_admin(self):
         for path in ("/", "/ct1", "/external", "/lab", "/attendance", "/analytics", "/subjects", "/electives", "/batches"):
             response = self.client.get(path)
+            if path=='/batches':
+                self.assertEqual(response.status_code,302)
+                response=self.client.get(response.location)
             self.assertEqual(response.status_code, 200, path)
 
     def test_integrated_result_data_pages_database_and_exports(self):
@@ -489,18 +497,28 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertEqual((active.semester_id, active.academic_year), (6, "2024-25"))
 
     def test_batch_assignment_and_clear(self):
-        response = self.client.post(
+        from flask import g
+        from term_services import placement
+        def reviewed_post(path, values):
+            g.pop('csrf_token',None)
+            token=re.search(rb'name="csrf_token" value="([^"]+)"',self.client.get('/profile/password').data).group(1).decode()
+            response=self.client.post(path,data=dict(values,semester_id=6,academic_year='2025-26',csrf_token=token))
+            self.assertEqual(response.status_code,302)
+            self.assertIn('/records/reviews/',response.location)
+            return self.client.post(response.location+'/confirm',data=dict(csrf_token=token,verified='on'))
+        response = reviewed_post(
             "/batches/save",
-            data={"division": "B", "batch": "B2", "student_prns": ["S001", "S002"]},
+            {"division": "B", "batch": "B2", "student_prns": ["S001", "S002"]},
         )
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(db.session.get(Student, "S001").batch, "B2")
-        self.assertEqual(db.session.get(Student, "S002").division, "B")
+        self.assertEqual(placement('S001',6,'2025-26').batch, "B2")
+        self.assertEqual(placement('S002',6,'2025-26').division, "B")
+        self.assertEqual(db.session.get(Student,'S001').division,'A')
 
-        response = self.client.post("/batches/clear", data={"student_prns": ["S001"]})
+        response = reviewed_post("/batches/clear", {"student_prns": ["S001"]})
         self.assertEqual(response.status_code, 302)
-        self.assertIsNone(db.session.get(Student, "S001").division)
-        self.assertIsNone(db.session.get(Student, "S001").batch)
+        self.assertIsNone(placement('S001',6,'2025-26').division)
+        self.assertIsNone(placement('S001',6,'2025-26').batch)
 
     def test_subject_crud_and_safe_delete(self):
         response = self.client.post("/subjects/save", data={

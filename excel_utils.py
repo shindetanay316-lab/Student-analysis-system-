@@ -190,7 +190,7 @@ def generate_ct1_template(meta, students):
         r = header_row + sr
 
         ws.cell(r,1,sr)
-        ws.cell(r,2,_roll(sr))
+        ws.cell(r,2,getattr(student,'roll_number',None) or _roll(sr))
         ws.cell(r,3,student.prn)
         ws.cell(r,4,student.name)
 

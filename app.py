@@ -8,7 +8,7 @@ from models import (
 )
 from batch_utils import (
     clean_filter, apply_student_batch_filters, batch_label,
-    DIVISION_OPTIONS, BATCH_OPTIONS
+    DIVISION_OPTIONS, BATCH_OPTIONS, term_filter_options
 )
 from academic_utils import (
     get_academic_year_for_semester,
@@ -40,6 +40,14 @@ def create_app():
     app.register_blueprint(workflow_bp)
     from routes_coursework import coursework_bp
     app.register_blueprint(coursework_bp)
+    from routes_curriculum import curriculum_bp
+    app.register_blueprint(curriculum_bp)
+    from routes_academic_history import academic_bp
+    app.register_blueprint(academic_bp)
+    from routes_completion import completion_bp
+    app.register_blueprint(completion_bp)
+    from completion_integration import register as register_completion
+    register_completion(app)
 
     login_manager.init_app(app)
     login_manager.login_view = 'login'
@@ -68,7 +76,7 @@ def create_app():
     from routes_subjects import subjects_bp
     app.register_blueprint(subjects_bp)
 
-    from routes_attendance import attendance_bp
+    from routes_attendance_complete import attendance_bp
     app.register_blueprint(attendance_bp)
 
     from routes_analytics import analytics_bp
@@ -237,8 +245,8 @@ def index():
         attendance_count = attendance_count,
         ct1_lock        = ct1_lock,
         locked_count    = locked_count,
-        division_options = DIVISION_OPTIONS,
-        batch_options    = BATCH_OPTIONS,
+        division_options = term_filter_options(active_sem.semester_id if active_sem else None,academic_year)[0],
+        batch_options    = term_filter_options(active_sem.semester_id if active_sem else None,academic_year)[1],
     )
 
 
@@ -402,8 +410,8 @@ def ct1_page():
         selected_code        = selected_code,
         selected_division    = selected_division,
         selected_batch       = selected_batch,
-        division_options     = DIVISION_OPTIONS,
-        batch_options        = BATCH_OPTIONS,
+        division_options     = term_filter_options(selected_semester,academic_year)[0],
+        batch_options        = term_filter_options(selected_semester,academic_year)[1],
     )
 
 
@@ -441,8 +449,9 @@ def download_ct1_template():
             Enrollment.academic_year == academic_year
         )
     )
-    enrolled_query = apply_student_batch_filters(enrolled_query, Student, division, batch)
-    enrolled = enrolled_query.order_by(Student.prn).all()
+    enrolled_query = apply_student_batch_filters(enrolled_query, Student, division, batch, semester_id, academic_year)
+    from term_services import students_in_term
+    enrolled = students_in_term(enrolled_query.order_by(Student.prn).all(),semester_id,academic_year)
 
     if not enrolled:
         flash('No students found for this subject and selected division/batch filter.', 'error')
@@ -529,8 +538,9 @@ def download_ct1_report(fmt):
             Enrollment.academic_year == academic_year
         )
     )
-    enrolled_query = apply_student_batch_filters(enrolled_query, Student, division, batch)
-    enrolled_students = enrolled_query.order_by(Student.prn).all()
+    enrolled_query = apply_student_batch_filters(enrolled_query, Student, division, batch, semester_id, academic_year)
+    from term_services import students_in_term
+    enrolled_students = students_in_term(enrolled_query.order_by(Student.prn).all(),semester_id,academic_year)
 
     if not enrolled_students:
         flash('No students found for this subject and selected division/batch filter.', 'error')
@@ -640,8 +650,11 @@ def _is_marks_locked(
         Student,
         division,
         batch,
+        semester_id,
+        academic_year,
     )
-    students = enrolled_query.all()
+    from term_services import students_in_term
+    students = students_in_term(enrolled_query.all(),semester_id,academic_year)
     if not students:
         return False
 

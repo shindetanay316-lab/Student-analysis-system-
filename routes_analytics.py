@@ -54,6 +54,8 @@ def _status_from_row(row):
 
 
 def _result_payload(row, subject, student, semester_id=None, academic_year=None):
+    from term_services import students_in_term
+    student=students_in_term([student],semester_id or subject.semester_id,academic_year or getattr(row,'academic_year',''))[0]
     status = _status_from_row(row)
     return {
         "prn": student.prn,
@@ -211,7 +213,22 @@ def _completed_semester_rows(sem, academic_year):
         .all()
     )
 
-    return theory_rows + lab_rows
+    from types import SimpleNamespace
+    from completion_models import AssessmentPolicy, AssessmentScore
+    from assessment_services import evaluate
+    configured=[]
+    for policy,score,student,subject in db.session.query(AssessmentPolicy,AssessmentScore,Student,Subject).join(
+        AssessmentScore,AssessmentScore.policy_token==AssessmentPolicy.token).join(Student,Student.prn==AssessmentScore.prn).join(
+        Subject,Subject.subject_code==AssessmentPolicy.subject_code).join(Enrollment,db.and_(Enrollment.prn==Student.prn,
+        Enrollment.subject_code==Subject.subject_code,Enrollment.semester_id==sem,Enrollment.academic_year==academic_year)).filter(
+        AssessmentPolicy.semester_id==sem,AssessmentPolicy.academic_year==academic_year,AssessmentPolicy.status=='APPROVED',_gradable_subject_filter()):
+        result=evaluate(policy,score.values)
+        if result['result']=='PENDING':
+            continue
+        maximum=sum(float(g['maximum']) for g in policy.rules['groups'])
+        configured.append((student,subject,SimpleNamespace(total_marks=round(result['total']/maximum*100,2),
+            grade=result['grade'],grade_point=result['grade_point'],is_passed=result['result']=='PASS',academic_year=academic_year)))
+    return theory_rows + lab_rows + configured
 
 
 def _pending_count_for_semester(sem, academic_year):
@@ -261,7 +278,10 @@ def _pending_count_for_semester(sem, academic_year):
         or 0
     )
 
-    return int(theory_pending + lab_pending)
+    from completion_models import AssessmentPolicy
+    codes={p.subject_code for p in AssessmentPolicy.query.filter_by(semester_id=sem,academic_year=academic_year,status='APPROVED')}
+    complete_configured=sum(1 for _student,subject,_row in _completed_semester_rows(sem,academic_year) if subject.subject_code in codes)
+    return max(0,int(theory_pending + lab_pending)-complete_configured)
 
 
 @analytics_bp.route("/api/analytics/visual")
@@ -353,7 +373,7 @@ def get_visual_analytics():
     for student, _subject, row in rows:
         mark = float(row.total_marks)
         status = _status_from_row(row)
-        if status == "FAIL" or mark < 40:
+        if status == "FAIL":
             grade_distribution["Fail"] += 1
             total_backlogs += 1
             backlog_students.add(student.prn)
@@ -614,71 +634,6 @@ def _latest_cgpa(prn, upto_semester_id=None):
     return float(row.cgpa) if row and row.cgpa is not None else None
 
 
-def _eligibility_from_summaries(semester_summaries):
-    """80% credit rule from the project plan.
-
-    Uses paired semesters: 1+2, 3+4, 5+6, 7+8.
-    If one of the paired semesters is missing or pending, eligibility remains pending.
-    """
-    if not semester_summaries:
-        return {
-            "status": "Data Pending",
-            "message": "No enrolled/result subjects found for this student.",
-            "percentage": None,
-        }
-
-    max_sem = max(int(s["semester_id"]) for s in semester_summaries)
-
-    if max_sem >= 7:
-        target_sems, label = [7, 8], "degree completion"
-    elif max_sem >= 5:
-        target_sems, label = [5, 6], "promotion to 4th year"
-    elif max_sem >= 3:
-        target_sems, label = [3, 4], "promotion to 3rd year"
-    else:
-        target_sems, label = [1, 2], "promotion to 2nd year"
-
-    by_sem = {int(s["semester_id"]): s for s in semester_summaries}
-    missing = [s for s in target_sems if s not in by_sem]
-    incomplete = [s for s in target_sems if s in by_sem and not by_sem[s].get("is_complete")]
-
-    if missing or incomplete:
-        parts = []
-        if missing:
-            parts.append("missing Sem " + ", ".join(map(str, missing)))
-        if incomplete:
-            parts.append("pending Sem " + ", ".join(map(str, incomplete)))
-        return {
-            "status": "Data Pending",
-            "message": f"Eligibility for {label} is pending because " + " and ".join(parts) + ".",
-            "percentage": None,
-        }
-
-    total_credits = sum(int(by_sem[s].get("total_credits") or 0) for s in target_sems)
-    earned_credits = sum(int(by_sem[s].get("credits_earned") or 0) for s in target_sems)
-
-    if total_credits <= 0:
-        return {
-            "status": "Data Pending",
-            "message": f"No registered credits found for {label}.",
-            "percentage": None,
-        }
-
-    percentage = round((earned_credits / total_credits) * 100, 2)
-    eligible = percentage >= 80.0
-
-    return {
-        "status": "Eligible" if eligible else "Not Eligible",
-        "message": (
-            f"{'Eligible' if eligible else 'Not eligible'} for {label}: "
-            f"{earned_credits}/{total_credits} credits earned ({percentage}%). Required: 80%."
-        ),
-        "percentage": percentage,
-        "credits_registered": total_credits,
-        "credits_earned": earned_credits,
-    }
-
-
 @analytics_bp.route("/api/analytics/student/<path:prn>")
 @login_required
 def get_student_history(prn):
@@ -687,13 +642,27 @@ def get_student_history(prn):
     if not student:
         return jsonify({"error": "Student not found.", "history": []}), 404
 
+    from flask_login import current_user
+    if current_user.role!='ADMIN':
+        from student_history_services import history as permitted_history
+        data=permitted_history(prn)
+        visible=[dict(semester_id=r['semester_id'],academic_year=r['academic_year'],subject_code=r['subject_code'],subject_name=r['subject_name'],
+            internal=float(r['internal']) if r['internal'] is not None else None,external=float(r['external']) if r['external'] is not None else None,
+            total_marks=float(r['total']) if r['total'] is not None else None,grade=r['grade'],grade_point=float(r['grade_point']) if r['grade_point'] is not None else None,result=r['result']) for r in data['local']]
+        return jsonify(dict(student=dict(prn=student.prn,name=student.name),history=visible,semester_summaries=[],
+            total_backlogs=sum(r['result']=='FAIL' for r in visible),pending_subjects=sum(r['result']=='PENDING' for r in visible),
+            latest_sgpa=None,cgpa='PENDING',eligibility='Progression is withheld in teacher scope.',eligibility_status='Withheld'))
     history, semester_summaries = _student_history(prn)
     total_backlogs = sum(1 for row in history if row.get("result") == "FAIL")
     pending_subjects = sum(1 for row in history if row.get("result") == "PENDING")
 
     upto_sem = max((s["semester_id"] for s in semester_summaries), default=None)
     cgpa = _latest_cgpa(prn, upto_semester_id=upto_sem)
-    eligibility = _eligibility_from_summaries(semester_summaries)
+    from completion_models import ProgressionDecision
+    approved=ProgressionDecision.query.filter_by(prn=prn).order_by(ProgressionDecision.created_at.desc()).first()
+    eligibility=dict(status=approved.decision if approved else 'Review pending',message=(
+        f'Administrator-approved {approved.decision.lower()} for Semester {approved.semester_id}, {approved.academic_year}.'
+        if approved else 'Progression requires a verified institution policy and administrator approval.'))
 
     latest_sgpa = None
     if semester_summaries:

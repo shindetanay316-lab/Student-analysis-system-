@@ -1,0 +1,1 @@
+{% extends 'result_data/base.html' %}{% block workspace_title %}Linking needs review{% endblock %}{% block content %}<h1>Linking needs a fresh review</h1><div class="alert alert-warning">{{ message }}</div><a class="btn btn-primary" href="{{ url_for('academic.mapping',job_id=context.job_id) }}">Return to source matching</a>{% endblock %}

@@ -10,6 +10,8 @@
     </div>
 
     <nav class="workspace-nav">
+        <a class="workspace-nav-link" href="{{ url_for('academic.student_list') }}"><i class="bi bi-person-vcard"></i><span>Student history and profiles</span></a>
+        <a class="workspace-nav-link" href="{{ url_for('completion.assessment_list') }}"><i class="bi bi-journal-check"></i><span>Assessment rules and marks</span></a>
         {% if current_user.role == 'TEACHER' %}
         <section class="workspace-nav-group"><h2>Workspace</h2>
             <a class="workspace-nav-link" href="{{ url_for('coursework.corrections') }}"><i class="bi bi-pencil-square"></i><span>My correction requests</span></a>
@@ -67,6 +69,12 @@
         {% if current_user.role == 'ADMIN' %}
         <section class="workspace-nav-group" aria-labelledby="admin-heading">
             <h2 id="admin-heading">Administration</h2>
+            <a class="workspace-nav-link" href="{{ url_for('completion.term_records') }}"><i class="bi bi-people"></i><span>Semester student records</span></a>
+            <a class="workspace-nav-link" href="{{ url_for('completion.admissions') }}"><i class="bi bi-person-plus"></i><span>Admissions awaiting PRN</span></a>
+            <a class="workspace-nav-link" href="{{ url_for('completion.progression_page') }}"><i class="bi bi-mortarboard"></i><span>Backlogs and progression</span></a>
+            <a class="workspace-nav-link" href="{{ url_for('completion.master_page') }}"><i class="bi bi-file-earmark-spreadsheet"></i><span>Department master workbook</span></a>
+            <a class="workspace-nav-link" href="{{ url_for('academic.linking') }}"><i class="bi bi-link-45deg"></i><span>Link university results</span></a>
+            <a class="workspace-nav-link" href="{{ url_for('curriculum.index') }}"><i class="bi bi-journal-check"></i><span>Syllabus and curriculum</span></a>
             <a class="workspace-nav-link" href="{{ url_for('coursework.corrections') }}"><i class="bi bi-check-square"></i><span>Mark corrections</span></a>
             <a class="workspace-nav-link" href="{{ url_for('workflow.roster_page') }}"><i class="bi bi-people"></i><span>Student rosters</span></a>
             <a class="workspace-nav-link" href="{{ url_for('teaching.teachers') }}"><i class="bi bi-person-workspace"></i><span>Teachers and assignments</span></a>

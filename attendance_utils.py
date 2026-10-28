@@ -124,7 +124,7 @@ def _style_cell(cell, *, bold=False, size=10, color=BLACK, fill=None, align='cen
         cell.fill = PatternFill('solid', fgColor=fill)
 
 
-def generate_timetable_template():
+def generate_timetable_template(meta=None):
     """
     Teacher-friendly timetable upload template.
 
@@ -156,14 +156,14 @@ def generate_timetable_template():
     _style_cell(ws.cell(3, 1), bold=True, size=13, color=WHITE, fill=GOLD)
 
     # Editable metadata row.
-    meta = [
+    metadata_cells = [
         ("A4", "ACADEMIC YEAR"), ("B4", "2025-26"),
         ("C4", "SEMESTER"), ("D4", 6),
         ("E4", "CLASS"), ("F4", "T.Y. ECE"),
         ("G4", "DIVISION"), ("H4", "A"),
         ("I4", "Edit only subject cells below"),
     ]
-    for addr, value in meta:
+    for addr, value in metadata_cells:
         ws[addr] = value
         _style_cell(ws[addr], bold=addr[0] in {'A','C','E','G'}, fill=LGRAY if addr[0] in {'A','C','E','G'} else None)
 
@@ -292,6 +292,15 @@ def generate_timetable_template():
         note_ws.cell(row=i, column=1, value=line).font = Font(name=TNR, size=11)
     note_ws.column_dimensions["A"].width = 120
 
+    if meta:
+        ws['B4'], ws['D4'], ws['H4'] = meta['academic_year'], meta['semester_id'], meta.get('division') or 'ALL'
+        reference = wb.create_sheet('Subject Codes')
+        reference.append(['Code', 'Subject Name', 'Type'])
+        for subject in Subject.query.filter_by(semester_id=meta['semester_id'], is_active=True).order_by(Subject.subject_code):
+            reference.append([subject.subject_code, subject.subject_name, subject.subject_type])
+        reference.column_dimensions['A'].width = 25
+        reference.column_dimensions['B'].width = 60
+        reference.column_dimensions['C'].width = 20
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -301,8 +310,8 @@ def generate_timetable_template():
 _TIME_RANGE_RE = re.compile(
     r"(\d{1,2}\s*[:.]\s*\d{2}\s*(?:AM|PM|am|pm)?)\s*(?:-|to|TO|–|—)\s*(\d{1,2}\s*[:.]\s*\d{2}\s*(?:AM|PM|am|pm)?)"
 )
-_SUBJECT_CODE_RE = re.compile(r"\b([A-Z]{2,}[A-Z0-9]*\d+[A-Z]?)\b")
-_BATCH_PREFIX_RE = re.compile(r"^\s*(?:BATCH\s*)?([A-Z]?\d|B\d|T\d|ALL)\s*[:\-]\s*(.+)$", re.IGNORECASE)
+_SUBJECT_CODE_RE = re.compile(r"\b((?=[A-Z0-9]{3,20}\b)(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*\d)[A-Z0-9]{3,20})\b")
+_BATCH_PREFIX_RE = re.compile(r"^\s*(?:BATCH\s*)?([A-Z]{0,4}\d{1,3}|ALL)\s*:\s*(.+)$", re.IGNORECASE)
 
 
 def _parse_time_range(value):
@@ -337,19 +346,20 @@ def _split_visual_cell_entries(value):
 
 def _session_type_from_text(text, subject=None):
     raw = _clean(text).upper()
-    if "ATTENDANCE_ONLY" in raw or "ATTENDANCE ONLY" in raw:
-        return "ATTENDANCE_ONLY"
-    if "TRAINING" in raw or "APTITUDE" in raw or "SOFT" in raw or "MENTOR" in raw or "LIBRARY" in raw or "SPORT" in raw:
-        return "ATTENDANCE_ONLY"
-    if "TUTORIAL" in raw:
-        return "TUTORIAL"
-    if "PROJECT" in raw or "MINI PROJECT" in raw:
-        return "PROJECT"
-    if "LAB" in raw or "PRACTICAL" in raw:
-        return "LAB"
-    if subject is not None and getattr(subject, 'subject_type', None):
-        return subject.subject_type
-    return "THEORY"
+    explicit = re.search(r'\[(THEORY|LAB|PROJECT|AUDIT|ATTENDANCE_ONLY|TRAINING|TUTORIAL)\]', raw)
+    if explicit:
+        return explicit[1]
+    if subject is not None:
+        return 'ATTENDANCE_ONLY' if subject.is_attendance_only else subject.subject_type
+    if re.search(r'\b(TRAINING|APTITUDE|MENTORING|LIBRARY|SPORTS)\b|SOFT\s*SKILLS?', raw):
+        return 'ATTENDANCE_ONLY'
+    if re.search(r'\bTUTORIAL\b', raw):
+        return 'TUTORIAL'
+    if re.search(r'\bPROJECT\b', raw):
+        return 'PROJECT'
+    if re.search(r'\b(LAB|PRACTICAL)\b', raw):
+        return 'LAB'
+    return 'THEORY'
 
 
 def _parse_visual_entry(text):
@@ -359,7 +369,7 @@ def _parse_visual_entry(text):
 
     batch = "ALL"
     m_batch = _BATCH_PREFIX_RE.match(raw)
-    if m_batch:
+    if m_batch and db.session.get(Subject, clean_code(m_batch.group(1))) is None:
         batch = clean_filter_value(m_batch.group(1))
         raw = m_batch.group(2).strip()
 
@@ -421,6 +431,8 @@ def _ensure_subject_for_timetable(subject_code, subject_name, semester_id, sessi
         db.session.add(subject)
         db.session.flush()
     else:
+        if attendance_only and not (subject.is_attendance_only or subject.is_audit):
+            raise ValueError("Use a distinct activity code; a credit-bearing subject cannot become attendance-only through a timetable.")
         if attendance_only:
             subject.is_attendance_only = True
             subject.is_audit = True
@@ -436,6 +448,8 @@ def _timetable_subject_error(subject_code, semester_id, session_type):
     attendance_only = session_type in {'ATTENDANCE_ONLY', 'TRAINING', 'TUTORIAL'}
     if subject is None and not attendance_only:
         return f"Subject code {subject_code} does not exist. Add it in Subject Management first."
+    if subject is not None and attendance_only and not (subject.is_attendance_only or subject.is_audit):
+        return "Use a separate activity code for attendance-only training; existing academic credits were preserved."
     if subject is not None and subject.semester_id != semester_id:
         return f"Subject code {subject_code} belongs to Semester {subject.semester_id}, not Semester {semester_id}."
     if subject is not None and not subject.is_active:
@@ -444,6 +458,7 @@ def _timetable_subject_error(subject_code, semester_id, session_type):
 
 
 def _upsert_timetable_slot(semester_id, academic_year, division, batch, day, start, end, subject_code, subject_name, session_type, faculty=None, room=None):
+    db.session.info.setdefault('attendance_timetable_terms', set()).add((semester_id, academic_year))
     _ensure_subject_for_timetable(subject_code, subject_name, semester_id, session_type)
     slot = TimetableSlot.query.filter_by(
         semester_id=semester_id,
@@ -482,13 +497,20 @@ def _parse_visual_timetable_upload(wb, default_academic_year=None):
     except (TypeError, ValueError):
         return False, ["Class Timetable: Semester value missing/invalid in cell D4."], 0
 
-    academic_year = _clean(ws["B4"].value, default_academic_year or "2025-26")
+    from routes_teaching import normalize_academic_year
+    try:
+        academic_year = normalize_academic_year(ws["B4"].value or default_academic_year)
+    except ValueError as error:
+        return False, [str(error)], 0
     division = clean_filter_value(ws["H4"].value)
 
     if not 1 <= semester_id <= 8:
         return False, ["Class Timetable: Semester must be between 1 and 8."], 0
     if not Semester.query.filter_by(semester_id=semester_id, academic_year=academic_year).first():
         return False, [f"Class Timetable: Semester {semester_id} ({academic_year}) does not exist."], 0
+
+    from attendance_services import lock_term
+    lock_term(dict(semester_id=semester_id, academic_year=academic_year))
 
     # A visual timetable upload is a replacement for this semester/year/division.
     # Deactivating first prevents removed or moved slots from remaining active.
@@ -556,6 +578,11 @@ def _parse_visual_timetable_upload(wb, default_academic_year=None):
         db.session.rollback()
         return False, ["No timetable subject entries found. Add subject codes inside the timetable cells."], 0
 
+    db.session.flush()
+    conflicts = _timetable_conflicts()
+    if conflicts:
+        db.session.rollback()
+        return False, conflicts[:20], 0
     db.session.commit()
     return True, [], created_or_updated
 
@@ -597,7 +624,15 @@ def _parse_flat_timetable_upload(wb, default_academic_year=None):
             errors.append(f"Row {r}: semester must be between 1 and 8")
             continue
 
-        academic_year = _clean(val("academic_year"), default_academic_year or "2025-26")
+        from routes_teaching import normalize_academic_year
+        try:
+            academic_year = normalize_academic_year(val("academic_year") or default_academic_year)
+        except ValueError as error:
+            errors.append(f"Row {r}: {error}")
+            continue
+        if not db.session.get(Semester, (semester_id, academic_year)):
+            errors.append(f"Row {r}: teaching term does not exist")
+            continue
         division = clean_filter_value(val("division"))
         batch = clean_filter_value(val("batch"))
         day = clean_day(val("day"))
@@ -626,6 +661,8 @@ def _parse_flat_timetable_upload(wb, default_academic_year=None):
             errors.append(f"Row {r}: {subject_error}")
             continue
 
+        from attendance_services import lock_term
+        lock_term(dict(semester_id=semester_id, academic_year=academic_year))
         _upsert_timetable_slot(
             semester_id=semester_id,
             academic_year=academic_year,
@@ -650,13 +687,37 @@ def _parse_flat_timetable_upload(wb, default_academic_year=None):
         db.session.rollback()
         return False, ["No timetable rows found in the workbook."], 0
 
+    db.session.flush()
+    conflicts = _timetable_conflicts()
+    if conflicts:
+        db.session.rollback()
+        return False, conflicts[:20], 0
     db.session.commit()
     return True, [], created_or_updated
 
 
+def _timetable_conflicts():
+    # Validate touched terms, not unrelated historical timetables.
+    terms = db.session.info.pop('attendance_timetable_terms', set())
+    errors = []
+    for semester, year in terms:
+        slots = TimetableSlot.query.filter_by(semester_id=semester, academic_year=year, is_active=True).all()
+        for i, left in enumerate(slots):
+            for right in slots[i + 1:]:
+                if left.day_of_week != right.day_of_week or left.start_time >= right.end_time or right.start_time >= left.end_time:
+                    continue
+                if left.division != 'ALL' and right.division != 'ALL' and left.division != right.division:
+                    continue
+                if left.batch != 'ALL' and right.batch != 'ALL' and left.batch != right.batch:
+                    continue
+                errors.append(f'Timetable overlap: {left.day_of_week} {left.start_time:%H:%M}, {left.subject_code} and {right.subject_code} for the same division/batch.')
+    return errors
+
+
 def parse_timetable_upload(file_obj, default_academic_year=None):
+    db.session.info.pop('attendance_timetable_terms', None)
     try:
-        wb = load_workbook(file_obj, data_only=True)
+        wb = load_workbook(file_obj, data_only=False)
     except Exception as exc:
         return False, [f"Cannot read timetable workbook: {exc}"], 0
 
@@ -677,8 +738,10 @@ def timetable_slots_for_subject(semester_id, academic_year, subject_code, divisi
         is_active=True,
     )
     # Include whole-class slots and selected division/batch slots.
-    q = q.filter(TimetableSlot.division.in_(['ALL', division]))
-    q = q.filter(TimetableSlot.batch.in_(['ALL', batch]))
+    if division != 'ALL':
+        q = q.filter(TimetableSlot.division.in_(['ALL', division]))
+    if batch != 'ALL':
+        q = q.filter(TimetableSlot.batch.in_(['ALL', batch]))
     return q.order_by(TimetableSlot.day_of_week, TimetableSlot.start_time).all()
 
 
@@ -719,23 +782,19 @@ def students_for_attendance(subject_code, semester_id, academic_year, division='
             Enrollment.academic_year == academic_year,
         )
     )
-    q = apply_student_batch_filters(q, Student, '' if division == 'ALL' else division, '' if batch == 'ALL' else batch)
+    q = apply_student_batch_filters(q, Student, '' if division == 'ALL' else division, '' if batch == 'ALL' else batch, semester_id, academic_year)
     enrolled = q.order_by(Student.prn).all()
     if enrolled:
-        return enrolled
+        from term_services import students_in_term
+        return students_in_term(enrolled,semester_id,academic_year)
 
-    # Attendance-only/audit activities often do not have enrollment rows.
-    # Never fall back to the whole class for a normal subject: doing so can
-    # silently add students who are not enrolled in that subject.
+    # Activities use a real teaching-term roster, never every student/cohort.
     if subject and (subject.is_attendance_only or subject.is_audit):
-        q = Student.query
-        q = apply_student_batch_filters(
-            q,
-            Student,
-            '' if division == 'ALL' else division,
-            '' if batch == 'ALL' else batch,
-        )
-        return q.order_by(Student.prn).all()
+        q = db.session.query(Student).join(Enrollment, Enrollment.prn == Student.prn).filter(
+            Enrollment.semester_id == semester_id, Enrollment.academic_year == academic_year)
+        q = apply_student_batch_filters(q, Student, '' if division == 'ALL' else division, '' if batch == 'ALL' else batch, semester_id, academic_year)
+        from term_services import students_in_term
+        return students_in_term(q.distinct().order_by(Student.prn).all(),semester_id,academic_year)
 
     return []
 
@@ -756,12 +815,12 @@ def generate_attendance_template(meta, students, generated_sessions):
     ws.cell(2, 1).value = (
         f"Semester {meta.get('semester_id')} | {meta.get('academic_year')} | "
         f"{meta.get('subject_name')} | {meta.get('division') or 'ALL'} / {meta.get('batch') or 'ALL'} | "
-        f"Fill P/A/L only"
+        f"Fill P/A/L/O; leave whole unconducted columns blank"
     )
     ws.cell(2, 1).font = Font(name=TNR, size=10, italic=True)
     ws.cell(2, 1).alignment = _center()
 
-    headers = ["Sr", "PRN", "Student Name"]
+    headers = ["Sr. No.", "PRN", "Student Name"]
     for item in generated_sessions:
         headers.append(item['label'])
     headers += ["Total", "Present", "%"]
@@ -778,15 +837,38 @@ def generate_attendance_template(meta, students, generated_sessions):
     present_col = total_col + 1
     pct_col = total_col + 2
 
+    # Fetch source entries once, rather than once per student/date cell.
+    from attendance_models import AttendanceHoliday
+    from attendance_services import applies
+    existing_sessions = AttendanceSession.query.filter_by(
+        semester_id=meta['semester_id'], academic_year=meta['academic_year'], subject_code=meta['subject_code']).all()
+    existing_by_key = {(v.lecture_date.isoformat(), v.start_time.strftime('%H:%M'), v.end_time.strftime('%H:%M'), v.division, v.batch): v for v in existing_sessions}
+    entry_by_key = {(e.session_id, e.prn): e.status for e in AttendanceEntry.query.filter(AttendanceEntry.session_id.in_([v.id for v in existing_sessions]))}
+    holidays = {(h.holiday_date.isoformat(), h.division) for h in AttendanceHoliday.query.filter_by(
+        semester_id=meta['semester_id'], academic_year=meta['academic_year'], is_active=True)}
+
     for r, stu in enumerate(students, 5):
         values = [r - 4, stu.prn, stu.name]
         for c, val in enumerate(values, 1):
             cell = ws.cell(r, c, val)
+            if isinstance(val, str): cell.data_type = "s"
             cell.font = Font(name=TNR, size=10)
             cell.alignment = _center() if c != 3 else _left()
             cell.border = _border()
         for c in range(start_date_col, total_col):
-            cell = ws.cell(r, c, "")
+            item = generated_sessions[c - start_date_col]
+            slot = item['slot']
+            slot_division = getattr(slot, 'division', meta.get('division') or 'ALL')
+            slot_batch = getattr(slot, 'batch', meta.get('batch') or 'ALL')
+            initial = ''
+            spec = dict(date=item['date'].isoformat(), start_time=slot.start_time.strftime('%H:%M'), end_time=slot.end_time.strftime('%H:%M'), division=slot_division, batch=slot_batch)
+            if not applies(slot_division, slot_batch, stu) or (spec['date'], 'ALL') in holidays or (spec['date'], (stu.division or 'ALL').upper()) in holidays:
+                initial = 'N/A'
+            else:
+                spec = dict(date=item['date'].isoformat(), start_time=slot.start_time.strftime('%H:%M'), end_time=slot.end_time.strftime('%H:%M'), division=slot_division, batch=slot_batch)
+                saved = existing_by_key.get((spec['date'], spec['start_time'], spec['end_time'], slot_division, slot_batch))
+                initial = entry_by_key.get((saved.id, stu.prn), '') if saved and saved.status != 'CANCELLED' else ''
+            cell = ws.cell(r, c, initial)
             cell.font = Font(name=TNR, size=10)
             cell.alignment = _center()
             cell.border = _border()
@@ -826,12 +908,16 @@ def generate_attendance_template(meta, students, generated_sessions):
     meta_ws.cell(10, 2, "start_time")
     meta_ws.cell(10, 3, "end_time")
     meta_ws.cell(10, 4, "session_type")
+    meta_ws.cell(10, 5, "division")
+    meta_ws.cell(10, 6, "batch")
     for i, item in enumerate(generated_sessions, 11):
         slot = item['slot']
         meta_ws.cell(i, 1, item['date'].isoformat())
         meta_ws.cell(i, 2, slot.start_time.strftime('%H:%M'))
         meta_ws.cell(i, 3, slot.end_time.strftime('%H:%M'))
         meta_ws.cell(i, 4, slot.session_type)
+        meta_ws.cell(i, 5, getattr(slot, "division", meta.get("division") or "ALL"))
+        meta_ws.cell(i, 6, getattr(slot, "batch", meta.get("batch") or "ALL"))
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -842,200 +928,13 @@ def generate_attendance_template(meta, students, generated_sessions):
 
 
 def refresh_attendance_summary(semester_id, academic_year, subject_code, prns=None):
-    """Recompute Attendance summary rows from all saved date-wise entries.
+    from attendance_services import refresh_summary
+    return refresh_summary(dict(semester_id=semester_id, academic_year=academic_year, subject_code=subject_code))
 
-    Important fix: older code overwrote total/present values with only the
-    current uploaded template. This version accumulates all uploaded attendance
-    sessions for the same subject + semester + academic year.
-    """
-    q = (
-        db.session.query(AttendanceEntry, AttendanceSession)
-        .join(AttendanceSession, AttendanceSession.id == AttendanceEntry.session_id)
-        .filter(
-            AttendanceSession.semester_id == semester_id,
-            AttendanceSession.academic_year == academic_year,
-            AttendanceSession.subject_code == subject_code,
-            AttendanceSession.status != 'CANCELLED',
-        )
-    )
-    if prns:
-        q = q.filter(AttendanceEntry.prn.in_(list(prns)))
-
-    buckets = {}
-    for entry, _session in q.all():
-        status = (entry.status or '').upper()
-        bucket = buckets.setdefault(entry.prn, {'total': 0, 'present': 0})
-        if status in PRESENT_VALUES:
-            bucket['total'] += 1
-            bucket['present'] += 1
-        elif status in ABSENT_VALUES:
-            bucket['total'] += 1
-        # Leave / official duty statuses are saved but not counted as conducted.
-
-    for prn, data in buckets.items():
-        summary = Attendance.query.filter_by(
-            prn=prn,
-            subject_code=subject_code,
-            semester_id=semester_id,
-            academic_year=academic_year,
-        ).first()
-        if not summary:
-            summary = Attendance(
-                prn=prn,
-                subject_code=subject_code,
-                semester_id=semester_id,
-                academic_year=academic_year,
-            )
-            db.session.add(summary)
-        total = int(data['total'] or 0)
-        present = int(data['present'] or 0)
-        summary.total_lectures = total
-        summary.attended_lectures = present
-        summary.percentage = Decimal(str(round((present / total * 100) if total else 0, 2)))
-
-    return len(buckets)
 
 def parse_attendance_upload(file_obj):
-    try:
-        wb = load_workbook(file_obj, data_only=False)
-    except Exception as exc:
-        return False, [f"Cannot read attendance workbook: {exc}"], 0
-    if "Attendance" not in wb.sheetnames or "_meta" not in wb.sheetnames:
-        return False, ["Invalid attendance file. Please upload the generated attendance template."], 0
-    ws = wb["Attendance"]
-    meta_ws = wb["_meta"]
-
-    meta = {}
-    for r in range(1, 8):
-        k = meta_ws.cell(r, 1).value
-        v = meta_ws.cell(r, 2).value
-        if k:
-            meta[str(k)] = v
-
-    try:
-        semester_id = int(meta.get('semester_id'))
-    except (TypeError, ValueError):
-        return False, ["Invalid or missing semester metadata."], 0
-    academic_year = str(meta.get('academic_year') or '').strip()
-    subject_code = clean_code(meta.get('subject_code'))
-    # Authorize workbook metadata, never just the visible page/form selection.
-    from flask import has_request_context
-    if has_request_context():
-        from teaching_access import require_assignment
-        require_assignment(subject_code,semester_id,academic_year)
-    division = clean_filter_value(meta.get('division'))
-    batch = clean_filter_value(meta.get('batch'))
-
-    subject = db.session.get(Subject, subject_code)
-    semester = Semester.query.filter_by(
-        semester_id=semester_id,
-        academic_year=academic_year,
-    ).first()
-    if not subject or subject.semester_id != semester_id or not semester:
-        return False, ["Attendance template contains an invalid subject, semester, or academic year."], 0
-
-    allowed_prns = {
-        student.prn for student in students_for_attendance(
-            subject_code, semester_id, academic_year, division, batch
-        )
-    }
-    if not allowed_prns:
-        return False, ["No eligible students exist for the attendance template scope."], 0
-
-    sessions = []
-    r = 11
-    while meta_ws.cell(r, 1).value:
-        lecture_date = parse_date(meta_ws.cell(r, 1).value)
-        start = parse_time_value(meta_ws.cell(r, 2).value)
-        end = parse_time_value(meta_ws.cell(r, 3).value)
-        session_type = clean_session_type(meta_ws.cell(r, 4).value)
-        if lecture_date and start and end:
-            if start >= end:
-                return False, [f"Invalid attendance session time on metadata row {r}."], 0
-            sess = AttendanceSession.query.filter_by(
-                semester_id=semester_id,
-                academic_year=academic_year,
-                division=division,
-                batch=batch,
-                subject_code=subject_code,
-                lecture_date=lecture_date,
-                start_time=start,
-                end_time=end,
-            ).first()
-            if not sess:
-                sess = AttendanceSession(
-                    semester_id=semester_id,
-                    academic_year=academic_year,
-                    division=division,
-                    batch=batch,
-                    subject_code=subject_code,
-                    lecture_date=lecture_date,
-                    start_time=start,
-                    end_time=end,
-                    session_type=session_type,
-                    status='COMPLETED',
-                )
-                db.session.add(sess)
-                db.session.flush()
-            sess.session_type = session_type
-            sess.status = 'COMPLETED'
-            sessions.append(sess)
-        r += 1
-
-    if not sessions:
-        return False, ["No attendance dates found in hidden metadata."], 0
-
-    date_start_col = 4
-    errors = []
-    saved_entries = 0
-    affected_prns = set()
-    seen_prns = set()
-
-    for row in range(5, ws.max_row + 1):
-        prn = _clean(ws.cell(row, 2).value)
-        if not prn:
-            continue
-        if prn in seen_prns:
-            errors.append(f"Row {row}: duplicate PRN {prn}")
-            continue
-        seen_prns.add(prn)
-        if prn not in allowed_prns:
-            errors.append(f"Row {row}: PRN {prn} is not eligible for this subject/division/batch")
-            continue
-        attended = 0
-        total = 0
-        for i, sess in enumerate(sessions):
-            raw = _clean(ws.cell(row, date_start_col + i).value).upper()
-            if raw == "":
-                continue
-            if raw in PRESENT_VALUES:
-                status = "P"
-                total += 1
-                attended += 1
-            elif raw in ABSENT_VALUES:
-                status = "A"
-                total += 1
-            elif raw in EXCUSED_VALUES:
-                status = "L"
-            else:
-                errors.append(f"Row {row}: invalid attendance value '{raw}'")
-                continue
-
-            entry = AttendanceEntry.query.filter_by(session_id=sess.id, prn=prn).first()
-            if not entry:
-                entry = AttendanceEntry(session_id=sess.id, prn=prn)
-                db.session.add(entry)
-            entry.status = status
-            affected_prns.add(prn)
-            saved_entries += 1
-
-    if errors:
-        db.session.rollback()
-        return False, errors[:20], 0
-
-    refresh_attendance_summary(semester_id, academic_year, subject_code, affected_prns)
-    db.session.commit()
-    return True, [], saved_entries
+    """Compatibility boundary: attendance must use a reviewed upload."""
+    return False, ["Attendance now requires preview and confirmation. Use Attendance > Upload for review."], 0
 
 
 def attendance_summary(subject_code, semester_id, academic_year, division='', batch=''):
@@ -1048,7 +947,7 @@ def attendance_summary(subject_code, semester_id, academic_year, division='', ba
             Attendance.academic_year == academic_year,
         )
     )
-    q = apply_student_batch_filters(q, Student, division if division != 'ALL' else '', batch if batch != 'ALL' else '')
+    q = apply_student_batch_filters(q, Student, division if division != 'ALL' else '', batch if batch != 'ALL' else '', semester_id, academic_year)
     return q.order_by(Student.prn).all()
 
 
@@ -1056,7 +955,7 @@ def generate_defaulter_excel(meta, rows, threshold=75.0):
     wb = Workbook()
     ws = wb.active
     ws.title = "Defaulters"
-    headers = ["Sr", "PRN", "Student Name", "Total", "Present", "Percentage", "Status"]
+    headers = ["Sr. No.", "PRN", "Student Name", "Total", "Present", "Percentage", "Status"]
     ws.merge_cells("A1:G1")
     ws["A1"] = f"Attendance Defaulter List - {meta.get('subject_code')}"
     ws["A1"].font = Font(name=TNR, size=14, bold=True, color=WHITE)
@@ -1110,7 +1009,7 @@ def generate_defaulter_pdf(meta, rows, threshold=75.0):
         Paragraph(f"Attendance Defaulter List - {meta.get('subject_code')} | Semester {meta.get('semester_id')} | {meta.get('academic_year')}", title_style),
         Spacer(1, 10),
     ]
-    data = [["Sr", "PRN", "Student Name", "Total", "Present", "%", "Status"]]
+    data = [["Sr. No.", "PRN", "Student Name", "Total", "Present", "%", "Status"]]
     sr = 1
     for att, stu in rows:
         pct = float(att.percentage or 0)

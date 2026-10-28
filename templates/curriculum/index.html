@@ -1,0 +1,19 @@
+{% extends 'result_data/base.html' %}
+{% block title %}Syllabus and curriculum | ACADPULSE{% endblock %}
+{% block workspace_title %}Syllabus and curriculum{% endblock %}
+{% block content %}
+<h1>Syllabus and curriculum approval</h1>
+<p>Upload the university syllabus, check the extracted teaching/evaluation scheme, then approve a version. Drafts never change subjects or student records.</p>
+<div class="card p-3 mb-4"><form method="post" action="{{ url_for('curriculum.upload') }}" enctype="multipart/form-data" class="row g-3">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="col-md-6"><label class="form-label">Version title</label><input class="form-control" name="title" maxlength="180" placeholder="First year 2024 syllabus" required></div>
+<div class="col-md-6"><label class="form-label">Branch / programme</label><input class="form-control" name="branch" maxlength="100" value="Electronics and Computer Engineering" required></div>
+<div class="col-md-4"><label class="form-label">Scheme</label><input class="form-control" name="scheme" maxlength="30" value="NEP/MIS" required></div>
+<div class="col-md-4"><label class="form-label">Effective academic year</label><input class="form-control" name="effective_year" placeholder="2024-25" required></div>
+<div class="col-md-4"><label class="form-label">Syllabus PDF (up to 20 MB)</label><input type="file" class="form-control" name="syllabus" accept=".pdf" required></div>
+<div><button class="btn btn-primary">Extract for review</button></div></form></div>
+<h2>Versions</h2><div class="table-responsive"><table class="table"><thead><tr><th>Version</th><th>Branch</th><th>Scheme</th><th>Effective year</th><th>Status</th><th>Courses</th></tr></thead><tbody>
+{% for v in versions %}<tr><td><a href="{{ url_for('curriculum.detail',token=v.token) }}">{{ v.title }}</a>{% if v.predecessor %} · revision{% endif %}</td><td>{{ v.branch }}</td><td>{{ v.scheme }}</td><td>{{ v.effective_year }}</td><td>{{ v.status }}</td><td>{{ v.courses|length }}</td></tr>{% else %}<tr><td colspan="6">No syllabus uploaded yet.</td></tr>{% endfor %}</tbody></table></div>
+<h2>Cohort and teaching-term bindings</h2><p>The regular cohort determines the curriculum for DSE students from semester 3. Their actual admission year is retained in student records. Bindings do not enroll students or promote them.</p>
+<div class="table-responsive"><table class="table"><thead><tr><th>Regular cohort</th><th>Teaching year</th><th>Semester</th><th>Group</th><th>Approved version</th></tr></thead><tbody>{% for b in bindings %}<tr><td>{{ b.regular_cohort }}</td><td>{{ b.academic_year }}</td><td>{{ b.semester_id }}</td><td>{{ b.group_name }}</td><td><a href="{{ url_for('curriculum.detail',token=b.version_token) }}">{{ b.version.title }}</a> · <a href="{{ url_for('curriculum.roster',binding_id=b.id) }}">Enroll students</a></td></tr>{% else %}<tr><td colspan="5">Approve a syllabus, then bind its selected semester/group to a cohort and teaching year.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

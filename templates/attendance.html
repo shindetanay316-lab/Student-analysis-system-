@@ -1,228 +1,36 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Attendance | ECE Academic Records</title>
-    <link rel="icon" href="{{ url_for('static', filename='images/right_logo.png') }}" type="image/png">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/institutional-ui.css') }}">
-</head>
-<body>
-{% set shell_area = 'attendance' %}
-{% include '_workspace_sidebar.html' %}
-<div class="main-wrap workspace-main">
-    <header class="topbar workspace-topbar">
-        <div class="topbar-left">
-            <button class="sb-toggle" type="button" onclick="toggleSidebar()" aria-label="Open navigation"><i class="bi bi-list" aria-hidden="true"></i></button>
-            <nav class="topbar-breadcrumb"><span>Academic workspace</span> &#8250; <strong>Attendance</strong></nav>
-        </div>
-        <div class="topbar-right">
-            <span class="topbar-ay">{{ academic_year }}</span>
-            <div class="topbar-semester-pill"><div class="topbar-dot"></div>Semester {{ selected_semester or '—' }}</div>
-        </div>
-    </header>
-
-    <main class="content workspace-content">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        <div class="flash-messages">
-            {% for cat, msg in messages %}<div class="alert alert-{{ cat }}" style="white-space:pre-line;">{{ msg }}</div>{% endfor %}
-        </div>
-        {% endif %}
-        {% endwith %}
-
-        <section class="page-section active">
-            <div class="section-head">
-                <div class="eyebrow">Coursework records</div>
-                <h1 class="section-title">Attendance management</h1>
-                <p class="section-sub">Maintain the weekly timetable, generate date-wise templates, and review attendance status.</p>
-            </div>
-
-            <div class="stats-grid">
-                <div class="stat-card gold"><div class="stat-icon"><i class="bi bi-calendar-week" aria-hidden="true"></i></div><div class="stat-value">{{ stats.slots }}</div><div class="stat-label">Weekly slots</div><div class="stat-sub">Stored for selected semester</div></div>
-                <div class="stat-card teal"><div class="stat-icon"><i class="bi bi-journals" aria-hidden="true"></i></div><div class="stat-value">{{ stats.subjects }}</div><div class="stat-label">Attendance subjects</div><div class="stat-sub">Includes attendance-only</div></div>
-                <div class="stat-card forest"><div class="stat-icon"><i class="bi bi-check2-square" aria-hidden="true"></i></div><div class="stat-value">{{ stats.records }}</div><div class="stat-label">Summary rows</div><div class="stat-sub">Uploaded for selected subject</div></div>
-                <div class="stat-card crimson"><div class="stat-icon"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i></div><div class="stat-value">{{ stats.defaulters }}</div><div class="stat-label">Below 75%</div><div class="stat-sub">Selected subject</div></div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-header">
-                    <div class="panel-header-icon gold">&#128197;</div>
-                    <div><div class="panel-title">Step 1 — Weekly Timetable Upload</div><div class="panel-sub">Admin uploads an Excel timetable that looks like the normal class timetable. Teachers only edit subject cells.</div></div>
-                    <a class="panel-badge" href="/attendance/download-timetable-template">Download Template</a>
-                </div>
-                <div class="panel-body">
-                    {% if current_user.role == 'ADMIN' %}
-                    <form method="POST" action="/attendance/upload-timetable" enctype="multipart/form-data" class="form-grid form-grid-2" style="align-items:end;">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="form-group">
-                            <label class="form-label">Upload Filled Timetable Excel</label>
-                            <input type="file" name="timetable_file" accept=".xlsx" class="form-control" required>
-                            <small style="color:var(--text-3);">Template is day/time-slot based like the college timetable. Use exact subject codes inside cells; use B1:/B2: for batch labs.</small>
-                        </div>
-                        <div class="form-group"><button class="btn btn-gold btn-lg" type="submit">Upload Timetable</button></div>
-                    </form>
-                    {% else %}
-                    <p style="font-size:13px;color:var(--text-2);">Only admin can upload timetable. Teachers can generate and upload attendance sheets after timetable is available.</p>
-                    {% endif %}
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-header">
-                    <div class="panel-header-icon teal">&#128221;</div>
-                    <div><div class="panel-title">Step 2 — Generate Attendance Template</div><div class="panel-sub">Select subject and semester date range. System creates columns only for actual lecture dates.</div></div>
-                </div>
-                <div class="panel-body">
-                    <form method="GET" action="/attendance/download-template" class="form-grid form-grid-3" style="align-items:end;">
-                        <input type="hidden" name="academic_year" value="{{ academic_year }}">
-                        <div class="form-group">
-                            <label class="form-label">Semester</label>
-                            <select class="form-control" name="semester_id" id="semesterSelect" onchange="reloadPageWithSemester()" required>
-                                <option value="">-- Select Semester --</option>
-                                {% for sem in all_semesters %}
-                                <option value="{{ sem.semester_id }}" data-year="{{ sem.academic_year }}" {% if selected_semester == sem.semester_id and academic_year == sem.academic_year %}selected{% endif %}>Semester {{ sem.semester_id }} ({{ sem.academic_year }})</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Subject / Activity</label>
-                            <select class="form-control" name="subject_code" required>
-                                <option value="">-- Select Subject --</option>
-                                {% for s in subjects %}
-                                <option value="{{ s.subject_code }}" {% if selected_subject == s.subject_code %}selected{% endif %}>{{ s.subject_code }} — {{ s.subject_name }}{% if s.is_attendance_only %} [Attendance Only]{% endif %}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Division</label>
-                            <select class="form-control" name="division">
-                                <option value="">ALL</option>
-                                {% for d in division_options %}<option value="{{ d }}" {% if selected_division == d %}selected{% endif %}>{{ d }}</option>{% endfor %}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Batch</label>
-                            <select class="form-control" name="batch">
-                                <option value="">ALL</option>
-                                {% for b in batch_options %}<option value="{{ b }}" {% if selected_batch == b %}selected{% endif %}>{{ b }}</option>{% endfor %}
-                            </select>
-                        </div>
-                        <div class="form-group"><label class="form-label">Start Date</label><input type="date" name="start_date" class="form-control" required></div>
-                        <div class="form-group"><label class="form-label">End Date</label><input type="date" name="end_date" class="form-control" required></div>
-                        <div class="form-group"><button class="btn btn-forest btn-lg" type="submit">Download Attendance Template</button></div>
-                    </form>
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-header">
-                    <div class="panel-header-icon forest">&#8682;</div>
-                    <div><div class="panel-title">Step 3 — Upload Filled Attendance</div><div class="panel-sub">Fill P/A/L in generated Excel and upload it here. Summary percentage is calculated automatically.</div></div>
-                </div>
-                <div class="panel-body">
-                    <form method="POST" action="/attendance/upload" enctype="multipart/form-data" class="form-grid form-grid-2" style="align-items:end;">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="form-group">
-                            <label class="form-label">Filled Attendance Excel</label>
-                            <input type="file" name="attendance_file" accept=".xlsx" class="form-control" required>
-                            <small style="color:var(--text-3);">Allowed values: P = Present, A = Absent, L/OD/Medical = stored but not counted in total.</small>
-                        </div>
-                        <div class="form-group"><button class="btn btn-teal btn-lg" type="submit">Upload Attendance</button></div>
-                    </form>
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-header">
-                    <div class="panel-header-icon crimson">&#9888;</div>
-                    <div><div class="panel-title">Attendance Summary & Defaulters</div><div class="panel-sub">Filter page by semester and subject to view uploaded summary rows.</div></div>
-                    {% if selected_subject %}
-                    <span style="display:flex;gap:8px;flex-wrap:wrap;">
-                        <a class="btn btn-outline btn-sm" href="/attendance/defaulters/excel?semester_id={{ selected_semester }}&academic_year={{ academic_year }}&subject_code={{ selected_subject }}&division={{ selected_division }}&batch={{ selected_batch }}">Excel Defaulters</a>
-                        <a class="btn btn-outline btn-sm" href="/attendance/defaulters/pdf?semester_id={{ selected_semester }}&academic_year={{ academic_year }}&subject_code={{ selected_subject }}&division={{ selected_division }}&batch={{ selected_batch }}">PDF Defaulters</a>
-                    </span>
-                    {% endif %}
-                </div>
-                <div class="panel-body">
-                    <form method="GET" action="/attendance" class="form-grid form-grid-3" style="align-items:end;margin-bottom:18px;">
-                        <input type="hidden" name="academic_year" id="summaryAcademicYear" value="{{ academic_year }}">
-                        <div class="form-group">
-                            <label class="form-label">Semester</label>
-                            <select class="form-control" name="semester_id" required onchange="document.getElementById('summaryAcademicYear').value=this.options[this.selectedIndex].dataset.year || ''">
-                                {% for sem in all_semesters %}<option value="{{ sem.semester_id }}" data-year="{{ sem.academic_year }}" {% if selected_semester == sem.semester_id and academic_year == sem.academic_year %}selected{% endif %}>Semester {{ sem.semester_id }} ({{ sem.academic_year }})</option>{% endfor %}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Subject</label>
-                            <select class="form-control" name="subject_code" required>
-                                <option value="">-- Select --</option>
-                                {% for s in subjects %}<option value="{{ s.subject_code }}" {% if selected_subject == s.subject_code %}selected{% endif %}>{{ s.subject_code }} — {{ s.subject_name }}</option>{% endfor %}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Division</label>
-                            <select class="form-control" name="division">
-                                <option value="">All Divisions</option>
-                                {% for div in division_options %}<option value="{{ div }}" {% if selected_division == div %}selected{% endif %}>Division {{ div }}</option>{% endfor %}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Batch</label>
-                            <select class="form-control" name="batch">
-                                <option value="">All Batches</option>
-                                {% for b in batch_options %}<option value="{{ b }}" {% if selected_batch == b %}selected{% endif %}>Batch {{ b }}</option>{% endfor %}
-                            </select>
-                        </div>
-                        <div class="form-group"><button class="btn btn-gold" type="submit">View Summary</button></div>
-                    </form>
-
-                    {% if slots %}
-                    <div style="margin-bottom:18px;">
-                        <h3 style="font-family:Playfair Display,serif;font-size:18px;margin-bottom:8px;">Weekly Slots Found</h3>
-                        <table class="data-table">
-                            <thead><tr><th>Day</th><th>Time</th><th>Subject</th><th>Division</th><th>Batch</th><th>Type</th><th>Faculty</th></tr></thead>
-                            <tbody>
-                                {% for slot in slots %}
-                                <tr><td>{{ slot.day_of_week }}</td><td>{{ slot.start_time.strftime('%H:%M') }} - {{ slot.end_time.strftime('%H:%M') }}</td><td>{{ slot.subject_code }}</td><td>{{ slot.division }}</td><td>{{ slot.batch }}</td><td>{{ slot.session_type }}</td><td>{{ slot.faculty_name or '—' }}</td></tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    {% endif %}
-
-                    {% if summary_rows %}
-                    <table class="data-table">
-                        <thead><tr><th>PRN</th><th>Name</th><th>Total</th><th>Present</th><th>Percentage</th><th>Status</th></tr></thead>
-                        <tbody>
-                            {% for att, stu in summary_rows %}
-                            {% set pct = att.percentage|float %}
-                            <tr>
-                                <td><span class="mono">{{ stu.prn }}</span></td><td>{{ stu.name }}</td><td>{{ att.total_lectures }}</td><td>{{ att.attended_lectures }}</td><td>{{ '%.2f'|format(pct) }}%</td>
-                                <td>{% if pct >= 75 %}<span class="pill pill-open">Safe</span>{% elif pct >= 65 %}<span class="pill pill-locked">Warning</span>{% else %}<span class="pill" style="background:var(--error-bg);color:var(--error);">Critical</span>{% endif %}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                    {% else %}
-                    <div style="padding:24px;text-align:center;color:var(--text-3);font-size:13px;">No attendance summary uploaded for selected subject yet.</div>
-                    {% endif %}
-                </div>
-            </div>
-        </section>
-    </main>
-    <footer class="workspace-footer"><span>ECE Academic Records &mdash; <strong>CSMSS Chh. Shahu College of Engineering</strong></span><span>Academic Year {{ academic_year }}</span></footer>
-</div>
-<script>
-function toggleSidebar(){ const sidebar = document.getElementById('sidebar'); if(sidebar){ sidebar.classList.toggle('open'); } }
-function reloadPageWithSemester(){
-    const select = document.getElementById('semesterSelect');
-    const sem = select.value;
-    const year = select.options[select.selectedIndex].dataset.year || '';
-    if(sem){ window.location.href = '/attendance?semester_id=' + encodeURIComponent(sem) + '&academic_year=' + encodeURIComponent(year); }
-}
-</script>
-</body>
-</html>
+{% extends 'result_data/base.html' %}
+{% block title %}Attendance | ACADPULSE{% endblock %}
+{% block workspace_title %}Attendance{% endblock %}
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
+{% macro scope(c) %}{% for k in ['semester_id','academic_year','subject_code','division','batch'] %}<input type="hidden" name="{{ k }}" value="{{ c[k] }}">{% endfor %}{% endmacro %}
+{% block content %}
+<h1>Attendance management</h1><p>Select a teaching term and subject. Scheduled, cancelled and unfilled classes never count as absences. Record only classes that have finished.</p>
+<div class="card p-3 mb-4"><form method="get" class="row g-3">
+<div class="col-md-2"><label class="form-label">Semester<select name="semester_id" class="form-select">{% for n in range(1,9) %}<option value="{{ n }}" {% if selected_semester==n %}selected{% endif %}>Semester {{ n }}</option>{% endfor %}</select></label></div>
+<div class="col-md-2"><label class="form-label">Academic year<input class="form-control" name="academic_year" value="{{ academic_year }}" list="attendanceYears" required></label><datalist id="attendanceYears">{% for sem in all_semesters %}<option value="{{ sem.academic_year }}">{% endfor %}</datalist></div>
+<div class="col-md-4"><label class="form-label">Subject / activity<select class="form-select" name="subject_code"><option value="">Load subjects for this term</option>{% for s in subjects %}<option value="{{ s.subject_code }}" {% if context and context.subject_code==s.subject_code %}selected{% endif %}>{{ s.subject_name }} ({{ s.subject_code }})</option>{% endfor %}</select></label></div>
+<div class="col-md-2"><label class="form-label">Division<input class="form-control" name="division" maxlength="10" value="{{ context.division if context else 'ALL' }}" placeholder="ALL or A"></label></div>
+<div class="col-md-2"><label class="form-label">Practical batch<input class="form-control" name="batch" maxlength="10" value="{{ context.batch if context else 'ALL' }}" placeholder="ALL or A1"></label></div>
+<div class="col-md-3"><label class="form-label">From<input type="date" class="form-control" name="start_date" value="{{ start_date }}"></label></div><div class="col-md-3"><label class="form-label">To<input type="date" class="form-control" name="end_date" value="{{ end_date }}"></label></div><div><button class="btn btn-primary">Load attendance</button> <small>When switching term, choose “Load subjects for this term” first.</small></div>
+</form></div>
+{% if current_user.role=='ADMIN' %}
+<details class="card p-3 mb-4" {% if not calendar %}open{% endif %}><summary><strong>Term calendar and weekly timetable</strong></summary>
+<p class="mt-3">{% if calendar %}Term: {{ calendar.start_date }} to {{ calendar.end_date }}.{% else %}Set term dates to keep templates inside the teaching period. Existing timetable-based templates remain available until a calendar is set.{% endif %}</p>
+<form method="post" action="{{ url_for('attendance.calendar_save') }}" class="row g-3 mb-3">{{ csrf() }}<input type="hidden" name="semester_id" value="{{ selected_semester }}"><input type="hidden" name="academic_year" value="{{ academic_year }}"><div class="col-md-4"><label>Term start<input class="form-control" type="date" name="start_date" value="{{ calendar.start_date if calendar else '' }}" required></label></div><div class="col-md-4"><label>Term end<input class="form-control" type="date" name="end_date" value="{{ calendar.end_date if calendar else '' }}" required></label></div><div><button class="btn btn-outline-primary">Save calendar for semester {{ selected_semester }} / {{ academic_year }}</button></div></form>
+<form method="post" action="{{ url_for('attendance.holiday_add') }}" class="row g-3 mb-3">{{ csrf() }}<input type="hidden" name="semester_id" value="{{ selected_semester }}"><input type="hidden" name="academic_year" value="{{ academic_year }}"><div class="col-md-3"><label>Holiday date<input class="form-control" type="date" name="holiday_date" required></label></div><div class="col-md-2"><label>Division<input class="form-control" name="division" value="ALL" maxlength="10"></label></div><div class="col-md-5"><label>Reason<input class="form-control" name="reason" minlength="5" maxlength="300" required></label></div><div><button class="btn btn-outline-primary">Add holiday / non-teaching day</button></div></form>
+<h3 class="h5">Weekly timetable</h3><p><a href="{{ url_for('attendance.download_timetable_template',semester_id=selected_semester,academic_year=academic_year,division=context.division if context else 'ALL') }}">Download timetable template</a> · Use actual subject codes, teaching year and division. A visual timetable replaces that division's weekly slots; saved attendance is retained.</p>
+<form method="post" action="{{ url_for('attendance.upload_timetable') }}" enctype="multipart/form-data">{{ csrf() }}<input class="form-control mb-2" name="timetable_file" type="file" accept=".xlsx" required><button class="btn btn-outline-primary">Upload timetable</button></form>
+</details>{% endif %}
+{% if holidays %}<div class="card p-3 mb-4"><h2 class="h5">Non-teaching days</h2>{% for h in holidays %}<div class="d-flex gap-3 align-items-center mb-2"><span>{{ h.holiday_date }} · {{ h.division }} · {{ h.reason }}</span>{% if current_user.role=='ADMIN' %}<form method="post" action="{{ url_for('attendance.holiday_remove',holiday_id=h.id) }}">{{ csrf() }}<button class="btn btn-sm btn-outline-secondary">Remove holiday</button></form>{% endif %}</div>{% endfor %}</div>{% endif %}
+{% if context %}
+<h2>{{ subject.subject_name }}</h2><p>{{ stats.students }} enrolled · {{ stats.recorded }} with counted attendance · {{ stats.defaulters }} below 75%. Students with no counted classes show Pending.</p>
+{% if not rows %}<div class="alert alert-warning">No student roster exists for this subject/scope. {% if current_user.role=='ADMIN' %}<a href="{{ url_for('workflow.roster_page',**context) }}">Set up the subject roster</a>.{% else %}Ask admin to enroll students in this teaching term.{% endif %}</div>{% endif %}
+<div class="card p-3 mb-4"><h3 class="h5">Record conducted classes</h3><p><a class="btn btn-outline-primary" href="{{ url_for('attendance.download_attendance_template',start_date=start_date,end_date=end_date,**context) }}">Download attendance sheet</a></p><p>Use P / A / L / O. Leave an entire future or unconducted column blank. Complete every applicable student in a conducted column. N/A marks a different batch. Existing entries are prefilled.</p><form method="post" action="{{ url_for('attendance.upload_attendance') }}" enctype="multipart/form-data">{{ csrf() }}<input class="form-control mb-2" type="file" name="attendance_file" accept=".xlsx" required><button class="btn btn-primary">Upload for review</button></form></div>
+<div class="card p-3 mb-4"><h3 class="h5">Add makeup / extra class</h3><form method="post" action="{{ url_for('attendance.session_action',action='makeup') }}" class="row g-3">{{ csrf() }}{{ scope(context) }}<div class="col-md-3"><label>Date<input class="form-control" type="date" name="date" required></label></div><div class="col-md-2"><label>Start<input class="form-control" type="time" name="start_time" required></label></div><div class="col-md-2"><label>End<input class="form-control" type="time" name="end_time" required></label></div><div class="col-md-5"><label>Reason<input class="form-control" name="reason" minlength="5" maxlength="500" required></label></div><div><button class="btn btn-outline-primary">Schedule makeup class</button></div></form></div>
+<details class="card p-3 mb-4"><summary><strong>Scheduled classes and cancellations ({{ planned|length }})</strong></summary><div class="table-responsive"><table class="table"><thead><tr><th>Date</th><th>Time</th><th>Division / batch</th><th>Status</th><th>Recorded entries</th><th>Cancel class</th></tr></thead><tbody>{% for s in planned %}<tr><td>{{ s.date }}</td><td>{{ s.start_time }}–{{ s.end_time }}</td><td>{{ s.division }}/{{ s.batch }}</td><td>{{ 'Pending' if not s.entries else s.saved_status }}</td><td>{{ s.entries }}</td><td><form method="post" action="{{ url_for('attendance.session_action',action='cancel') }}">{{ csrf() }}{{ scope(context) }}<input type="hidden" name="date" value="{{ s.date }}"><input type="hidden" name="start_time" value="{{ s.start_time }}"><input type="hidden" name="end_time" value="{{ s.end_time }}"><input type="hidden" name="slot_division" value="{{ s.division }}"><input type="hidden" name="slot_batch" value="{{ s.batch }}"><input class="form-control form-control-sm mb-1" name="reason" minlength="5" maxlength="500" required placeholder="Cancellation reason"><button class="btn btn-sm btn-outline-danger">Cancel and update totals</button></form></td></tr>{% else %}<tr><td colspan="6">No scheduled classes in this range.</td></tr>{% endfor %}{% for s in cancelled %}<tr><td>{{ s.lecture_date }}</td><td>{{ s.start_time }}–{{ s.end_time }}</td><td>{{ s.division }}/{{ s.batch }}</td><td colspan="3">Cancelled · retained for history</td></tr>{% endfor %}</tbody></table></div></details>
+{% if rows|selectattr('conflicts')|list %}<div class="alert alert-warning">Some older uploads contain conflicting copies of the same class. Those entries remain pending. Download and confirm a current attendance sheet to resolve them; original entries remain in the register.</div>{% endif %}
+<h3 class="h5">Attendance summary · {{ start_date }} to {{ end_date }}</h3><p>{% for fmt,label in [('excel','Excel'),('pdf','PDF')] %}<a class="btn btn-sm btn-outline-primary" href="{{ url_for('attendance.report',fmt=fmt,start_date=start_date,end_date=end_date,**context) }}">Summary {{ label }}</a> <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('attendance.download_defaulters',fmt=fmt,start_date=start_date,end_date=end_date,threshold=75,**context) }}">Below 75% {{ label }}</a> {% endfor %}</p>
+<div class="table-responsive"><table class="table table-striped"><thead><tr><th>Sr. No.</th><th>PRN</th><th>Student Name</th><th>Counted classes</th><th>Present</th><th>Absent</th><th>Leave</th><th>Official duty</th><th>Percentage</th><th>Status</th></tr></thead><tbody>{% for r in rows %}<tr><td>{{ loop.index }}</td><td>{{ r.student.prn }}</td><td>{{ r.student.name }}</td><td>{{ r.total }}</td><td>{{ r.present }}</td><td>{{ r.total-r.present }}</td><td>{{ r.leave }}</td><td>{{ r.official }}</td><td>{{ ('%.2f'|format(r.percentage) ~ '%') if r.percentage is not none else '—' }}</td><td>{{ 'Review conflicts' if r.conflicts else 'Pending' if not r.total else 'Below 75%' if r.percentage<75 else '75% or above' }}</td></tr>{% endfor %}</tbody></table></div>
+<details class="card p-3 my-4"><summary><strong>Attendance change history</strong></summary><p class="small">Latest 100 changes for this subject and teaching term.</p>{% for change in changes %}<div class="border-bottom py-2"><strong>{{ change.action }}</strong> · {{ change.actor.username }} · {{ change.created_at }}<div>{{ change.reason }}</div><details><summary>Before / after</summary><pre>{{ change.before|tojson(indent=2) }} → {{ change.after|tojson(indent=2) }}</pre></details></div>{% else %}<p>No changes recorded yet.</p>{% endfor %}</details>
+{% endif %}
+{% endblock %}

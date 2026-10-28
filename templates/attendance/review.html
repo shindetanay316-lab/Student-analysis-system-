@@ -1,0 +1,11 @@
+{% extends 'result_data/base.html' %}
+{% block title %}Attendance preview | ACADPULSE{% endblock %}
+{% block workspace_title %}Attendance preview{% endblock %}
+{% block content %}
+<h1>Review attendance before saving</h1><p>{{ subject.subject_name }} · {{ review.context.academic_year }} · Semester {{ review.context.semester_id }} · {{ review.context.division }}/{{ review.context.batch }}</p>
+<p>Only filled conducted-class columns are included. P = present, A = absent, L = leave, O = official duty. Leave and official duty retain the existing policy: neither adds to the percentage denominator. Blank future/unfilled columns remain pending. Changes to existing entries are retained in the attendance history.</p>
+<a href="{{ url_for('attendance.review_source',token=review.token) }}">Download original uploaded workbook</a>
+<div class="table-responsive my-3"><table class="table table-bordered"><thead><tr><th>Sr. No.</th><th>PRN</th><th>Student Name</th>{% for s in review.context.sessions %}<th>{{ s.date }}<br>{{ s.start_time }}–{{ s.end_time }}<br>{{ s.division }}/{{ s.batch }}</th>{% endfor %}</tr></thead><tbody>{% for r in review.rows %}<tr><td>{{ loop.index }}</td><td>{{ r.prn }}</td><td>{{ r.name }}</td>{% for status in r.statuses %}<td>{% if r.previous[loop.index0] and r.previous[loop.index0]!=status %}<del>{{ r.previous[loop.index0] }}</del> → {% endif %}{{ status or 'N/A' }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+{% if not review.confirmed_at %}<form method="post" action="{{ url_for('attendance.confirm_review',token=review.token) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-success">Confirm and save attendance</button></form>{% else %}<div class="alert alert-success">Already confirmed. Reopening does not create duplicate attendance.</div>{% endif %}
+<p class="mt-3"><a href="{{ url_for('attendance.attendance_page',subject_code=review.context.subject_code,semester_id=review.context.semester_id,academic_year=review.context.academic_year,division=review.context.division,batch=review.context.batch) }}">Return to attendance</a></p>
+{% endblock %}

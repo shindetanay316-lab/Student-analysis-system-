@@ -82,6 +82,8 @@ def roster_preview():
             prns=request.form.getlist('student_prns')
             students=Student.query.filter(Student.prn.in_(prns)).order_by(Student.prn).all()
             if len(students)!=len(set(prns)):raise ValueError('One or more selected students no longer exist.')
+            from term_services import students_in_term
+            students=students_in_term(students,context['semester_id'],context['academic_year'])
             rows=[{'prn':s.prn,'name':s.name,'admission_year':s.year_of_admission,'division':s.division or '','batch':s.batch or ''} for s in students]
             services.validate_roster_rows(context,rows)
         review=services.new_review('ROSTER',context,rows,request.files.get('roster_file'))
@@ -115,6 +117,7 @@ def marks_preview():return preview_internal_upload()
 
 def authorized_review(token):
     review=db.get_or_404(WorkflowReview,token)
+    if review.kind not in {'ROSTER','MARKS','LAB_MARKS','EXTERNAL_MARKS'}:abort(404)
     if review.owner_id!=current_user.user_id and current_user.role!='ADMIN':abort(403)
     if review.kind=='ROSTER' and current_user.role!='ADMIN':abort(403)
     context=review.context

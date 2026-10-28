@@ -1,0 +1,2 @@
+<label>Semester <select class="form-select" name="semester_id" required>{% for n in range(1,9) %}<option value="{{ n }}" {% if c and c.semester_id==n %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></label>
+<label>Teaching academic year <select class="form-select" name="academic_year" required>{% for year in terms|map(attribute='academic_year')|unique %}<option {% if c and c.academic_year==year %}selected{% endif %}>{{ year }}</option>{% endfor %}</select></label>

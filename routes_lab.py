@@ -9,7 +9,7 @@ from lab_excel_utils import generate_lab_template, parse_lab_upload, generate_la
 from lab_report_utils import build_lab_report_data, generate_lab_pdf_report
 from batch_utils import (
     clean_filter, apply_student_batch_filters, batch_label,
-    DIVISION_OPTIONS, BATCH_OPTIONS
+    DIVISION_OPTIONS, BATCH_OPTIONS, term_filter_options
 )
 from academic_utils import (
     get_academic_year_for_semester,
@@ -51,8 +51,10 @@ def _get_lab_students(subject_code, semester_id, academic_year, division="", bat
             models.Enrollment.academic_year == academic_year,
         )
     )
-    query = apply_student_batch_filters(query, models.Student, division, batch)
+    query = apply_student_batch_filters(query, models.Student, division, batch, semester_id, academic_year)
     students = query.order_by(models.Student.prn).all()
+    from term_services import students_in_term
+    students=students_in_term(students,semester_id,academic_year)
 
     prns = [student.prn for student in students]
     marks = models.LabMarks.query.filter(
@@ -70,6 +72,7 @@ def _get_lab_students(subject_code, semester_id, academic_year, division="", bat
             recalculate_lab_result(lm)
 
         rows.append({
+            'roll_number': student.roll_number,
             "prn": student.prn,
             "name": student.name,
             "ca1": float(lm.ca1) if lm and getattr(lm, "ca1", None) is not None else None,
@@ -133,8 +136,8 @@ def lab_marks_page():
         total_students=len(students_data),
         selected_division=division,
         selected_batch=batch,
-        division_options=DIVISION_OPTIONS,
-        batch_options=BATCH_OPTIONS,
+        division_options=term_filter_options(selected_semester,academic_year)[0],
+        batch_options=term_filter_options(selected_semester,academic_year)[1],
         batch_label=batch_label(division, batch),
     )
 

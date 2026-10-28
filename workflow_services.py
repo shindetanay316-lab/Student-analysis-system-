@@ -35,7 +35,9 @@ def roster(context):
     from batch_utils import apply_student_batch_filters
     query=Student.query.join(Enrollment,Enrollment.prn==Student.prn).filter(
         Enrollment.subject_code==context['subject_code'],Enrollment.semester_id==context['semester_id'],Enrollment.academic_year==context['academic_year'])
-    return apply_student_batch_filters(query,Student,context.get('division',''),context.get('batch','')).order_by(Student.prn).all()
+    from term_services import students_in_term
+    selected = apply_student_batch_filters(query,Student,context.get('division',''),context.get('batch',''),context['semester_id'],context['academic_year']).order_by(Student.prn).all()
+    return students_in_term(selected,context['semester_id'],context['academic_year'])
 
 
 def matching_marks(context):
@@ -61,6 +63,9 @@ def fingerprint(context,kind,rows=None):
         from coursework_services import approved_revisions
         revisions=approved_revisions(context)
         if revisions:data['revisions']=[r.token for r in revisions]
+    from completion_models import StudentTerm
+    data['term_placements']=[(r.prn,r.division,r.batch,r.roll_number,r.revision) for r in StudentTerm.query.filter_by(
+        semester_id=context['semester_id'],academic_year=context['academic_year']).order_by(StudentTerm.prn)]
     return sha256(json.dumps(data,sort_keys=True,default=str).encode()).hexdigest()
 
 
@@ -83,6 +88,9 @@ def workbook(file):
 
 
 def parse_marks(file,context):
+    from assessment_services import policy_for
+    if policy_for(context['subject_code'],context['semester_id'],context['academic_year']):
+        raise ValueError('Use the configured assessment marks screen for this subject and term.')
     book=workbook(file);sheet=book.active
     if '_meta' not in book.sheetnames:raise ValueError('Download a fresh marks template; its context metadata is required.')
     meta={str(row[0]):str(row[1] or '').strip() for row in book['_meta'].iter_rows(min_row=1,max_row=8,max_col=2,values_only=True) if row[0]}
@@ -149,6 +157,9 @@ def roster_template(context,source_id=None):
     else:source=[(s.prn,s.name) for s in roster(context)]
     for prn,name in source:
         existing=db.session.get(Student,prn)
+        if existing:
+            from term_services import students_in_term
+            existing=students_in_term([existing],context['semester_id'],context['academic_year'])[0]
         sheet.append([prn,name,existing.year_of_admission if existing else None,existing.division if existing else '',existing.batch if existing else ''])
         for cell in sheet[sheet.max_row]:
             if isinstance(cell.value,str):cell.data_type='s'
@@ -171,14 +182,16 @@ def validate_roster_rows(context,rows):
         if existing:
             if ' '.join(existing.name.split()).casefold()!=' '.join(row['name'].split()).casefold():raise ValueError(f'{prn}: the name conflicts with an existing student. Resolve the identity before enrollment.')
             if row['admission_year'] is not None and row['admission_year']!=existing.year_of_admission:raise ValueError(f'{prn}: admission year conflicts with the existing profile.')
+            from term_services import students_in_term
+            term_student=students_in_term([existing],context['semester_id'],context['academic_year'])[0]
             for key in ('division','batch'):
-                if row.get(key) and row[key]!=(getattr(existing,key) or ''):raise ValueError(f'{prn}: {key} conflicts with the existing profile. Use Divisions and batches for placement changes.')
+                if row.get(key) and row[key]!=(getattr(term_student,key) or ''):raise ValueError(f'{prn}: {key} conflicts with this teaching term. Use Semester student records for placement changes.')
         elif row['admission_year'] is None:raise ValueError(f'{prn}: enter the actual admission year. It cannot be inferred from PRN or university results.')
         if row['admission_year'] is not None and not 1900<=row['admission_year']<=int(context['academic_year'][:4])+1:raise ValueError(f'{prn}: invalid admission year.')
         if len(row.get('division',''))>10 or len(row.get('batch',''))>10:raise ValueError(f'{prn}: division and batch must be at most 10 characters.')
-        if subject.is_elective:
+        if subject.is_elective or subject.elective_group:
             others=Enrollment.query.join(Subject).filter(Enrollment.prn==prn,Enrollment.semester_id==context['semester_id'],Enrollment.academic_year==context['academic_year'],
-                Subject.elective_group==subject.elective_group,Subject.subject_code!=subject.subject_code,Subject.is_elective.is_(True)).first()
+                Subject.elective_group==subject.elective_group,Subject.subject_code!=subject.subject_code).first()
             if others:raise ValueError(f'{prn}: another option in this elective group is already enrolled. Use Elective assignment to change options.')
     if not rows:raise ValueError('The roster contains no students.')
 
@@ -204,6 +217,10 @@ def parse_roster(file,context):
 
 
 def confirm(review):
+    if review.kind=='MARKS':
+        from assessment_services import policy_for
+        if policy_for(review.context['subject_code'],review.context['semester_id'],review.context['academic_year']):
+            raise ValueError('An assessment policy was approved. Use its configured marks screen and create a fresh preview.')
     if review.kind in {'LAB_MARKS','EXTERNAL_MARKS'}:
         from coursework_services import confirm as coursework_confirm
         return coursework_confirm(review)

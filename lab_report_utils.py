@@ -71,7 +71,7 @@ def build_lab_report_data(subject_code, semester_id, academic_year, division="",
             Enrollment.academic_year == academic_year,
         )
     )
-    students_query = apply_student_batch_filters(students_query, Student, division, batch)
+    students_query = apply_student_batch_filters(students_query, Student, division, batch, semester_id, academic_year)
     students = students_query.order_by(Student.prn).all()
 
     marks_rows = LabMarks.query.filter_by(

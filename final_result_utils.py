@@ -286,6 +286,22 @@ def build_student_semester_result(prn, semester_id, academic_year):
         credits = int(subject.credits or 0)
         total_credits += credits
 
+        from assessment_services import policy_for, result_for
+        policy = policy_for(subject.subject_code, semester_id, academic_year)
+        if policy:
+            configured = result_for(policy, prn)
+            points = _add_subject_result(rows, subject, configured['internal'], configured['external'],
+                configured['total'], configured['grade'] or '-', configured['grade_point'], configured['result'])
+            if configured['result']=='PENDING':
+                is_complete = False
+            elif configured['result']=='PASS':
+                credits_earned += credits
+            else:
+                has_failed = True
+            if points is not None:
+                total_credit_points += points
+            continue
+
         internal = None
         external = None
         total = None
@@ -435,10 +451,8 @@ def build_semester_result(semester_id, academic_year, division="", batch=""):
         .distinct()
     )
 
-    if division:
-        students_query = students_query.filter(Student.division == division)
-    if batch:
-        students_query = students_query.filter(Student.batch == batch)
+    from batch_utils import apply_student_batch_filters
+    students_query = apply_student_batch_filters(students_query,Student,division,batch,semester_id,academic_year)
 
     students = students_query.order_by(Student.prn).all()
 

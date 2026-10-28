@@ -147,7 +147,7 @@ def generate_external_template(meta, students):
     for sr, student in enumerate(students, 1):
         r = header_row + sr
         ws.cell(r, 1, sr)
-        ws.cell(r, 2, _roll(sr))
+        ws.cell(r, 2, student.get('roll_number') or _roll(sr))
         ws.cell(r, 3, student['prn'])
         ws.cell(r, 4, student['name'])
         ws.cell(r, 5, student.get('external_marks'))

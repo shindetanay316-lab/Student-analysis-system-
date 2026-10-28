@@ -15,8 +15,12 @@
 <body class="{{ 'authenticated-layout' if current_user.is_authenticated else 'guest-layout' }}">
     <a class="skip-link" href="#main-content">Skip to main content</a>
     {% if current_user.is_authenticated %}
-        {% if request.blueprint in ['teaching','workflow','coursework'] or (request.endpoint == 'index' and current_user.role == 'TEACHER') %}
+        {% if request.blueprint in ['teaching','workflow','coursework','academic','completion'] or (request.endpoint == 'index' and current_user.role == 'TEACHER') %}
             {% set shell_area = 'teaching' %}
+        {% elif request.blueprint == 'attendance' %}
+            {% set shell_area = 'attendance' %}
+        {% elif request.blueprint == 'curriculum' %}
+            {% set shell_area = 'curriculum' %}
         {% elif request.blueprint == 'result_analysis' %}
             {% set shell_area = 'result-analysis' %}
         {% elif request.endpoint == 'result_imports.history' %}

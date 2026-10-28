@@ -93,12 +93,14 @@ def teachers():
     for start in range(date.today().year-4,date.today().year+2):years.add(f'{start}-{(start+1)%100:02}')
     years.add(year)
     groups={subject.subject_code:[] for subject in subjects}
-    rows=db.session.query(Enrollment.subject_code,Student.year_of_admission,Student.division,Student.batch,func.count()).join(
-        Student,Student.prn==Enrollment.prn).filter(Enrollment.semester_id==semester_id,Enrollment.academic_year==year).group_by(
-        Enrollment.subject_code,Student.year_of_admission,Student.division,Student.batch).order_by(
-        Student.year_of_admission,Student.division,Student.batch).all()
-    for code,cohort,division,batch,count in rows:
-        if code in groups:groups[code].append({'cohort':cohort,'division':division or 'Not assigned','batch':batch or 'Not assigned','count':count})
+    from collections import Counter
+    from term_services import students_in_term
+    enrolled=db.session.query(Enrollment.subject_code,Student).join(Student,Student.prn==Enrollment.prn).filter(
+        Enrollment.semester_id==semester_id,Enrollment.academic_year==year).all()
+    placed={s.prn:s for s in students_in_term([student for code,student in enrolled],semester_id,year)}
+    counts=Counter((code,student.year_of_admission,placed[student.prn].division or 'Not assigned',placed[student.prn].batch or 'Not assigned') for code,student in enrolled)
+    for (code,cohort,division,batch),count in sorted(counts.items()):
+        if code in groups:groups[code].append(dict(cohort=cohort,division=division,batch=batch,count=count))
     return render_template('teaching/teachers.html',teachers=User.query.filter_by(role='TEACHER').order_by(User.username).all(),
         subjects=subjects,academic_year=year,semester_id=semester_id,academic_years=sorted(years,reverse=True),roster_groups=groups,
         assignments=TeachingAssignment.query.order_by(TeachingAssignment.academic_year.desc(),TeachingAssignment.id.desc()).all(),

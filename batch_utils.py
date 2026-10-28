@@ -14,15 +14,25 @@ def clean_filter(value):
     return value
 
 
-def apply_student_batch_filters(query, StudentModel, division=None, batch=None):
-    """Apply optional Student.division / Student.batch filters to a joined Student query."""
+def apply_student_batch_filters(query, StudentModel, division=None, batch=None, semester_id=None, academic_year=None):
+    """Use a semester placement when available, with legacy defaults for old callers."""
     division = clean_filter(division)
     batch = clean_filter(batch)
 
-    if division:
-        query = query.filter(StudentModel.division == division)
-    if batch:
-        query = query.filter(StudentModel.batch == batch)
+    if semester_id and academic_year:
+        from models import db
+        from completion_models import StudentTerm
+        scope = (StudentTerm.prn==StudentModel.prn, StudentTerm.semester_id==semester_id, StudentTerm.academic_year==academic_year)
+        exists = db.select(StudentTerm.id).where(*scope).correlate(StudentModel).exists()
+        for key,value in [('division',division),('batch',batch)]:
+            if value:
+                column = db.select(getattr(StudentTerm,key)).where(*scope).correlate(StudentModel).scalar_subquery()
+                query = query.filter(db.case((exists,column),else_=getattr(StudentModel,key))==value)
+    else:
+        if division:
+            query = query.filter(StudentModel.division == division)
+        if batch:
+            query = query.filter(StudentModel.batch == batch)
     return query
 
 
@@ -36,3 +46,13 @@ def batch_label(division=None, batch=None):
     if batch:
         return f"Batch {batch}"
     return "All Students"
+
+
+def term_filter_options(semester_id=None, academic_year=None):
+    from completion_models import StudentTerm
+    query=StudentTerm.query
+    if semester_id and academic_year:
+        query=query.filter_by(semester_id=semester_id,academic_year=academic_year)
+    rows=query.with_entities(StudentTerm.division,StudentTerm.batch).distinct().all()
+    return (sorted(set(DIVISION_OPTIONS)|{d for d,b in rows if d}),
+        sorted(set(BATCH_OPTIONS)|{b for d,b in rows if b}))

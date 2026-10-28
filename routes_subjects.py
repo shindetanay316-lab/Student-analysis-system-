@@ -42,7 +42,12 @@ def _flag(name):
 def _subject_dependency_count(subject_code):
     """Rows that make hard-delete unsafe."""
     from teaching_models import TeachingAssignment
+    from completion_models import AssessmentPolicy, CourseOutcomeSelection
     return {
+        'assessment_policies': AssessmentPolicy.query.filter_by(subject_code=subject_code).count(),
+        'approved_outcomes': CourseOutcomeSelection.query.filter_by(subject_code=subject_code).count(),
+        "linked_university_results": _linked_university_count(subject_code),
+        "approved_curricula": len(_approved_curricula(subject_code)),
         "teaching_assignments": TeachingAssignment.query.filter_by(subject_code=subject_code).count(),
         "enrollments": Enrollment.query.filter_by(subject_code=subject_code).count(),
         "theory_marks": TheoryMarks.query.filter_by(subject_code=subject_code).count(),
@@ -52,6 +57,23 @@ def _subject_dependency_count(subject_code):
         "timetable_slots": TimetableSlot.query.filter_by(subject_code=subject_code).count(),
         "child_options": Subject.query.filter_by(parent_subject_code=subject_code).count(),
     }
+
+
+def _approved_curricula(subject_code):
+    from curriculum_models import CurriculumVersion
+    return [v.token for v in CurriculumVersion.query.with_entities(CurriculumVersion.token, CurriculumVersion.courses).filter_by(status='APPROVED')
+            if any(r.get('include') and r.get('code') == subject_code for r in v.courses)]
+
+
+def _linked_university_count(subject_code):
+    from academic_link_models import UniversityLinkedResult
+    return UniversityLinkedResult.query.filter_by(subject_code=subject_code).count()
+
+
+def _configured_definition_count(subject_code):
+    from completion_models import AssessmentPolicy, CourseOutcomeSelection
+    return (AssessmentPolicy.query.filter_by(subject_code=subject_code).count()
+        + CourseOutcomeSelection.query.filter_by(subject_code=subject_code).count())
 
 
 def _total_dependencies(dep):
@@ -182,6 +204,10 @@ def save_subject():
         subject = Subject(subject_code=subject_code)
         db.session.add(subject)
 
+    if is_edit and (_approved_curricula(subject_code) or _linked_university_count(subject_code) or _configured_definition_count(subject_code)):
+        flash('This subject is used by approved curriculum or university evidence. Its academic definition was preserved; enable/disable remains available.', 'error')
+        return redirect(url_for('subjects.subjects_page', edit=subject_code))
+
     credits = _int_value("credits", 0)
     l_hours = _int_value("l_hours", 0)
     t_hours = _int_value("t_hours", 0)
@@ -307,6 +333,9 @@ def enroll_compulsory_subject(subject_code):
         return redirect(url_for("index"))
 
     subject = _subject_or_404(subject_code)
+    if subject.elective_group and not subject.is_elective:
+        flash('This course is a curriculum choice option. Use reviewed curriculum enrollment to select exactly one option per student.', 'error')
+        return redirect(url_for('curriculum.index'))
     if subject.is_audit:
         flash("Audit subjects are not enrolled for marks/SGPA.", "error")
         return redirect(request.referrer or url_for("subjects.subjects_page"))
